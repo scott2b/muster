@@ -10,4 +10,6 @@ pub mod tmux;
 
 pub use config::{Profile, ProfileStore, TabProfile};
 pub use error::{Error, Result};
-pub use tmux::{SessionInfo, TmuxClient, TmuxSession, TmuxWindow};
+pub use tmux::{
+    ControlMode, MusterEvent, SessionInfo, StreamParser, TmuxClient, TmuxSession, TmuxWindow,
+};
