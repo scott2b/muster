@@ -1,0 +1,24 @@
+[package]
+name = "muster"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Terminal session group management library built on tmux"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+dirs = { workspace = true }
+which = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+rstest = { workspace = true }
+tokio-test = { workspace = true }
