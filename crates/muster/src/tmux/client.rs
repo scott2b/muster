@@ -84,6 +84,27 @@ impl TmuxClient {
         Ok(())
     }
 
+    /// Kill (close) a window in a session.
+    pub fn kill_window(&self, session: &str, window_index: u32) -> Result<()> {
+        let target = format!("{session}:{window_index}");
+        self.cmd(&["kill-window", "-t", &target])?;
+        Ok(())
+    }
+
+    /// Select (switch to) a window in a session.
+    pub fn select_window(&self, session: &str, window_index: u32) -> Result<()> {
+        let target = format!("{session}:{window_index}");
+        self.cmd(&["select-window", "-t", &target])?;
+        Ok(())
+    }
+
+    /// Rename a window in a session.
+    pub fn rename_window(&self, session: &str, window_index: u32, new_name: &str) -> Result<()> {
+        let target = format!("{session}:{window_index}");
+        self.cmd(&["rename-window", "-t", &target, new_name])?;
+        Ok(())
+    }
+
     /// Check if a session exists.
     pub fn has_session(&self, name: &str) -> Result<bool> {
         let output = Command::new(&self.tmux_path)
@@ -505,6 +526,91 @@ mod tests {
         assert_eq!(s.display_name, "Listed Project");
         assert_eq!(s.color, "#00ff00");
         assert!(s.profile_id.is_none());
+
+        client.kill_session(&session_name).ok();
+    }
+
+    #[test]
+    #[ignore]
+    fn test_add_window() {
+        let client = TmuxClient::new().expect("tmux must be installed");
+        let session_name = format!("muster_test_{}", uuid::Uuid::new_v4());
+        client
+            .new_session(&session_name, "first", "/tmp")
+            .expect("create session");
+
+        client
+            .new_window(&session_name, "second", "/tmp")
+            .expect("add window");
+
+        let windows = client.list_windows(&session_name).unwrap();
+        assert_eq!(windows.len(), 2);
+        assert_eq!(windows[1].name, "second");
+
+        client.kill_session(&session_name).ok();
+    }
+
+    #[test]
+    #[ignore]
+    fn test_close_window() {
+        let client = TmuxClient::new().expect("tmux must be installed");
+        let session_name = format!("muster_test_{}", uuid::Uuid::new_v4());
+        client
+            .new_session(&session_name, "first", "/tmp")
+            .expect("create session");
+        client
+            .new_window(&session_name, "second", "/tmp")
+            .expect("add window");
+
+        // Close second window
+        client.kill_window(&session_name, 1).expect("close window");
+
+        let windows = client.list_windows(&session_name).unwrap();
+        assert_eq!(windows.len(), 1);
+        assert_eq!(windows[0].name, "first");
+
+        client.kill_session(&session_name).ok();
+    }
+
+    #[test]
+    #[ignore]
+    fn test_switch_window() {
+        let client = TmuxClient::new().expect("tmux must be installed");
+        let session_name = format!("muster_test_{}", uuid::Uuid::new_v4());
+        client
+            .new_session(&session_name, "first", "/tmp")
+            .expect("create session");
+        client
+            .new_window(&session_name, "second", "/tmp")
+            .expect("add window");
+
+        // Switch back to first window
+        client
+            .select_window(&session_name, 0)
+            .expect("switch window");
+
+        let windows = client.list_windows(&session_name).unwrap();
+        let active = windows.iter().find(|w| w.active).unwrap();
+        assert_eq!(active.index, 0);
+
+        client.kill_session(&session_name).ok();
+    }
+
+    #[test]
+    #[ignore]
+    fn test_rename_window() {
+        let client = TmuxClient::new().expect("tmux must be installed");
+        let session_name = format!("muster_test_{}", uuid::Uuid::new_v4());
+        client
+            .new_session(&session_name, "original", "/tmp")
+            .expect("create session");
+
+        client
+            .rename_window(&session_name, 0, "renamed")
+            .expect("rename window");
+
+        let windows = client.list_windows(&session_name).unwrap();
+        assert_eq!(windows[0].name, "renamed");
 
         client.kill_session(&session_name).ok();
     }
