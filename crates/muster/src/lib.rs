@@ -9,7 +9,7 @@ pub mod error;
 pub mod session;
 pub mod tmux;
 
-pub use config::{Profile, ProfileStore, TabProfile};
+pub use config::{Profile, ProfileStore, Settings, SettingsStore, TabProfile};
 pub use emulator::{Emulator, EmulatorHandle, GhosttyEmulator};
 pub use error::{Error, Result};
 pub use tmux::{
