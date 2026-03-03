@@ -79,6 +79,13 @@ pub fn build_theme_commands(
             "status-position".into(),
             "top".into(),
         ],
+        vec![
+            "set-option".into(),
+            "-t".into(),
+            session.into(),
+            "mouse".into(),
+            "on".into(),
+        ],
     ];
     Ok(commands)
 }
@@ -147,7 +154,7 @@ mod tests {
     #[test]
     fn test_build_theme_commands() {
         let commands = build_theme_commands("muster_test", "#f97316", "PKM Project").unwrap();
-        assert_eq!(commands.len(), 6);
+        assert_eq!(commands.len(), 7);
 
         // status-style
         assert_eq!(commands[0][3], "status-style");
