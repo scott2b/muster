@@ -71,6 +71,17 @@ pub fn compute_dimmed(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
     (r / 3, g / 3, b / 3)
 }
 
+/// Compute relative luminance and return black or white for best contrast.
+pub fn contrast_fg(r: u8, g: u8, b: u8) -> &'static str {
+    // Relative luminance formula (simplified sRGB)
+    let luminance = 0.299 * f64::from(r) + 0.587 * f64::from(g) + 0.114 * f64::from(b);
+    if luminance > 128.0 {
+        "#000000"
+    } else {
+        "#ffffff"
+    }
+}
+
 /// Build the list of tmux set-option commands for theming a session.
 pub fn build_theme_commands(
     session: &str,
@@ -80,6 +91,7 @@ pub fn build_theme_commands(
     let (r, g, b) = hex_to_rgb(color)?;
     let (dr, dg, db) = compute_dimmed(r, g, b);
     let darker = rgb_to_hex(dr, dg, db);
+    let fg = contrast_fg(r, g, b);
 
     let commands = vec![
         vec![
@@ -87,7 +99,7 @@ pub fn build_theme_commands(
             "-t".into(),
             session.into(),
             "status-style".into(),
-            format!("bg={color},fg=#000000"),
+            format!("bg={color},fg={fg}"),
         ],
         vec![
             "set-option".into(),
@@ -101,7 +113,7 @@ pub fn build_theme_commands(
             "-t".into(),
             session.into(),
             "window-status-format".into(),
-            "#[fg=#000000]  #I: #W  ".into(),
+            format!("#[fg={fg}]  #I: #W  "),
         ],
         vec![
             "set-option".into(),
