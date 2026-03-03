@@ -284,10 +284,31 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Command::Color { session, color } => {
-            let session = m.resolve_session(&session)?;
-            m.set_color(&session, &color)?;
-            if !cli.json {
-                println!("Color updated: {session} → {color}");
+            match m.resolve_session(&session) {
+                Ok(session_name) => {
+                    m.set_color(&session_name, &color)?;
+                    if !cli.json {
+                        println!("Color updated: {session_name} → {color}");
+                    }
+                }
+                Err(_) => {
+                    // No running session — try updating the profile directly
+                    let profiles = m.list_profiles()?;
+                    let found = profiles
+                        .iter()
+                        .find(|p| p.name == session || p.id == session);
+                    let Some(p) = found else {
+                        eprintln!("No session or profile found: {session}");
+                        process::exit(1);
+                    };
+                    let resolved = muster::session::theme::resolve_color(&color)?;
+                    let mut profile = p.clone();
+                    profile.color = resolved;
+                    m.update_profile(profile)?;
+                    if !cli.json {
+                        println!("Color updated: {} → {color}", p.name);
+                    }
+                }
             }
         }
 
