@@ -88,6 +88,17 @@ enum Command {
     /// Show all sessions with details
     Status,
 
+    /// Peek at recent terminal output
+    Peek {
+        /// Profile name, ID, or session name
+        session: String,
+        /// Window names to show (all if omitted)
+        windows: Vec<String>,
+        /// Lines of output per window
+        #[arg(short = 'n', long, default_value = "50")]
+        lines: u32,
+    },
+
     /// Pin the current window to the session's profile
     Pin,
 
@@ -1008,9 +1019,33 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .get_option(&session_name, "@muster_name")?
                 .unwrap_or_else(|| session_name.clone());
 
-            let summary = format!("Exited: {display_name} \u{25b8} {window_name}");
-            let body = format!("Exit code: {exit_code}");
+            // Capture last output from the dying pane before kill
+            let snapshot = m.client().capture_pane(&pane_id, 50).unwrap_or_default();
 
+            // Save snapshot to logs directory
+            let log_dir = config_dir.join("logs").join(&session_name);
+            let _ = std::fs::create_dir_all(&log_dir);
+            let log_file = log_dir.join(format!("{window_name}.last"));
+            let _ = std::fs::write(&log_file, &snapshot);
+
+            // Include last few lines in notification body
+            let last_lines: String = snapshot
+                .lines()
+                .rev()
+                .take(5)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .filter(|l| !l.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+            let body = if last_lines.is_empty() {
+                format!("Exit code: {exit_code}")
+            } else {
+                format!("Exit code: {exit_code}\n{last_lines}")
+            };
+
+            let summary = format!("Exited: {display_name} \u{25b8} {window_name}");
             send_notification(&summary, &body);
 
             // Clean up the dead pane
@@ -1051,6 +1086,73 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                             let marker = if w.active { "→" } else { " " };
                             println!("  {marker} {}: {} ({})", w.index, w.name, w.cwd);
                         }
+                    }
+                }
+            }
+        }
+
+        Command::Peek {
+            session,
+            windows,
+            lines,
+        } => {
+            let session_name = m.resolve_session(&session)?;
+            let all_windows = m.client().list_windows(&session_name)?;
+
+            let targets: Vec<_> = if windows.is_empty() {
+                all_windows.iter().collect()
+            } else {
+                all_windows
+                    .iter()
+                    .filter(|w| {
+                        windows
+                            .iter()
+                            .any(|name| w.name.eq_ignore_ascii_case(name))
+                    })
+                    .collect()
+            };
+
+            if targets.is_empty() {
+                eprintln!("No matching windows found.");
+                process::exit(1);
+            }
+
+            if cli.json {
+                let entries: Vec<serde_json::Value> = targets
+                    .iter()
+                    .map(|win| {
+                        let target = format!("{}:{}", session_name, win.index);
+                        let output = m
+                            .client()
+                            .capture_pane(&target, lines)
+                            .unwrap_or_default();
+                        serde_json::json!({
+                            "window": win.name,
+                            "index": win.index,
+                            "output": output.trim_end(),
+                        })
+                    })
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&entries)?);
+            } else {
+                for (i, win) in targets.iter().enumerate() {
+                    if i > 0 {
+                        println!();
+                    }
+                    let header = format!("\u{2500}\u{2500} {} ", win.name);
+                    let pad = 40usize.saturating_sub(header.len());
+                    println!("{}{}", header, "\u{2500}".repeat(pad));
+                    let target = format!("{}:{}", session_name, win.index);
+                    match m.client().capture_pane(&target, lines) {
+                        Ok(output) => {
+                            let trimmed = output.trim_end();
+                            if trimmed.is_empty() {
+                                println!("(empty)");
+                            } else {
+                                println!("{trimmed}");
+                            }
+                        }
+                        Err(e) => eprintln!("  (capture failed: {e})"),
                     }
                 }
             }

@@ -71,6 +71,7 @@ muster new <name> [--tab 'name:cwd[:cmd]' ...] [--color hex] [--detach]
 muster kill <session-name>                     # Destroy a session
 muster list                                    # List profiles and running sessions
 muster status                                  # Show sessions with window details
+muster peek <session> [windows...] [-n lines]   # Peek at recent terminal output
 muster color <session> <hex-color>             # Change session color live
 muster pin                                     # Pin current tmux window to session profile
 muster unpin                                   # Unpin current tmux window from profile
@@ -204,7 +205,26 @@ These are parsed into `MusterEvent` variants and distributed via `tokio::broadca
 
 ## Notifications
 
-Muster sends notifications on session events — pane exits and terminal bell alerts. By default these appear as tmux status bar messages.
+## Peek
+
+Check on a session's terminal output without attaching:
+
+```bash
+muster peek pkm               # all windows, last 50 lines each
+muster peek pkm Shell          # specific window only
+muster peek pkm -n 10          # last 10 lines per window
+muster peek pkm --json         # machine-readable output
+```
+
+## Death Snapshots
+
+When a pane's process exits, muster captures the last 50 lines of output before cleaning up the dead pane. Snapshots are saved to `~/.config/muster/logs/<session_name>/<window_name>.last` and the last few lines are included in the desktop notification body.
+
+This preserves output that would otherwise be lost when tmux cleans up dead panes — useful for seeing why a build or server crashed without having been attached at the time.
+
+## Notifications
+
+Muster sends notifications on session events — pane exits (with last output lines) and terminal bell alerts. By default these appear as tmux status bar messages.
 
 On macOS, you can enable native desktop notifications (Notification Center) by installing the notification helper:
 

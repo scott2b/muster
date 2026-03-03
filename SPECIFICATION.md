@@ -108,6 +108,9 @@ There is no application-level cache of tmux state. There is no runtime state fil
 ~/.config/muster/
 ├── profiles.json             # Saved terminal group profiles
 ├── settings.json             # Global settings (tmux path, shell preference)
+├── logs/                     # Death snapshots (last output from exited panes)
+│   └── <session_name>/
+│       └── <window_name>.last
 └── Muster.app/               # macOS notification helper (created by `muster setup-notifications`)
     └── Contents/
         ├── Info.plist         # CFBundleIdentifier: com.muster.notify
@@ -593,6 +596,7 @@ muster launch <profile-name-or-id>       # Launch or attach to a profile's sessi
 muster attach <session-name>             # Attach to a running session
 muster new <name> [--tab 'name:cwd[:cmd]' ...] [--color <hex>] [--detach]
 muster kill <session-name>               # Destroy a session
+muster peek <session> [windows...] [-n lines]  # Peek at recent terminal output
 muster color <session> <hex-color>       # Change session color live
 muster status                            # Show all sessions with window counts, CWDs
 muster pin                               # Pin current tmux window to session profile
@@ -781,7 +785,11 @@ The minimum viable library. Everything needed for session group lifecycle manage
 
 Each feature is self-contained and builds on the core without modifying it. Ordered roughly by value and implementation simplicity.
 
-**Desktop notifications** *(implemented)* — Session events (pane exits, terminal bell) trigger desktop notifications on macOS via Notification Center, falling back to tmux `display-message` over SSH or when the helper isn't installed. Implementation: tmux hooks (`pane-died`, `alert-bell`) invoke `muster _pane-died` / `muster _bell` subcommands, which delegate to a `muster-notify` helper binary inside a minimal `Muster.app` bundle at `~/.config/muster/Muster.app/`. The app bundle provides the `CFBundleIdentifier` that macOS requires for persistent notification permissions. CLI: `muster setup-notifications` creates the bundle.
+**Desktop notifications** *(implemented)* — Session events (pane exits, terminal bell) trigger desktop notifications on macOS via Notification Center, falling back to tmux `display-message` over SSH or when the helper isn't installed. Implementation: tmux hooks (`pane-died`, `alert-bell`) invoke `muster _pane-died` / `muster _bell` subcommands, which delegate to a `muster-notify` helper binary inside a minimal `Muster.app` bundle at `~/.config/muster/Muster.app/`. The app bundle provides the `CFBundleIdentifier` that macOS requires for persistent notification permissions. CLI: `muster setup-notifications` creates the bundle. Pane death notifications include the last few lines of terminal output in the notification body.
+
+**Death snapshots** *(implemented)* — When a pane dies, the `_pane-died` handler captures the last 50 lines of output before calling `kill-pane`. Snapshots are saved to `~/.config/muster/logs/<session_name>/<window_name>.last`. Files are overwritten on each death event per window name, keeping the directory small.
+
+**Peek** *(implemented)* — One-shot capture of recent terminal output without attaching. CLI: `muster peek <session> [windows...] [-n lines]`. Uses tmux `capture-pane -p -J` to grab scrollback, trims to requested line count. Supports `--json` for machine-readable output.
 
 **Session snapshotting** — Capture a running session's current windows, CWDs, and layout into a profile. Implementation: query `list-windows` with format string to get window names, CWDs, and pane count, then serialize to a `Profile`. CLI: `muster profile save --from-session <name>`. Library: `save_profile_from_session(session: &str) -> Result<Profile, Error>`.
 

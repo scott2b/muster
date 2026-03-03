@@ -228,6 +228,29 @@ impl TmuxClient {
         })
     }
 
+    // ---- Capture methods ----
+
+    /// Capture recent content of a pane.
+    ///
+    /// Returns the last `lines` non-empty lines of output. Uses `capture-pane -p -J`
+    /// which joins wrapped lines and prints to stdout. Captures the visible pane
+    /// plus some scrollback, then trims to the requested line count.
+    pub fn capture_pane(&self, target: &str, lines: u32) -> Result<String> {
+        // tmux -S is relative to the visible area (negative = history lines),
+        // but always includes the full visible pane too. So we capture `lines`
+        // of scrollback + visible, then trim to exactly `lines` in Rust.
+        let start = format!("-{lines}");
+        let raw = self.cmd(&["capture-pane", "-p", "-J", "-t", target, "-S", &start])?;
+        let trimmed = raw.trim_end();
+        let all_lines: Vec<&str> = trimmed.lines().collect();
+        let n = lines as usize;
+        if all_lines.len() <= n {
+            Ok(trimmed.to_string())
+        } else {
+            Ok(all_lines[all_lines.len() - n..].join("\n"))
+        }
+    }
+
     // ---- Window option methods ----
 
     /// Set a window-level option (works for built-in and `@user` options).
