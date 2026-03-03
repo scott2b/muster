@@ -1,3 +1,4 @@
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process;
 
@@ -28,6 +29,9 @@ enum Command {
     Launch {
         /// Profile name or ID
         profile: String,
+        /// Create session but don't attach
+        #[arg(long)]
+        detach: bool,
     },
 
     /// Attach to a running session
@@ -55,6 +59,9 @@ enum Command {
         /// Color (hex)
         #[arg(long, default_value = "#808080")]
         color: String,
+        /// Create session but don't attach
+        #[arg(long)]
+        detach: bool,
     },
 
     /// Change session color live
@@ -105,6 +112,22 @@ fn default_config_dir() -> PathBuf {
         .join("muster")
 }
 
+/// Find the tmux binary path (same one the library uses).
+fn tmux_path() -> PathBuf {
+    which::which("tmux").unwrap_or_else(|_| PathBuf::from("tmux"))
+}
+
+/// Replace the current process with `tmux attach -t <session>`.
+/// This never returns on success.
+fn exec_tmux_attach(session: &str) -> ! {
+    let err = std::process::Command::new(tmux_path())
+        .args(["attach-session", "-t", session])
+        .exec();
+    // exec() only returns on error
+    eprintln!("Failed to exec tmux: {err}");
+    process::exit(1);
+}
+
 #[allow(clippy::too_many_lines)]
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
@@ -151,8 +174,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        Command::Launch { profile } => {
-            // Try to find profile by name first, then by ID
+        Command::Launch { profile, detach } => {
             let profiles = m.list_profiles()?;
             let found = profiles
                 .iter()
@@ -165,19 +187,42 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let profile_id = p.id.clone();
 
             let info = m.launch(&profile_id)?;
+
             if cli.json {
                 println!("{}", serde_json::to_string_pretty(&info)?);
-            } else {
+            } else if detach {
                 println!("Launched: {} ({})", info.display_name, info.session_name);
+            } else {
+                // Replace this process with tmux attach
+                exec_tmux_attach(&info.session_name);
             }
         }
 
         Command::Attach { session, window } => {
+            // Verify session exists
+            let sessions = m.list_sessions()?;
+            let found = sessions
+                .iter()
+                .find(|s| s.session_name == session || s.display_name == session);
+
+            let session_name = match found {
+                Some(s) => s.session_name.clone(),
+                None => {
+                    // Try as a literal tmux session name
+                    if m.client().has_session(&session)? {
+                        session.clone()
+                    } else {
+                        eprintln!("Session not found: {session}");
+                        process::exit(1);
+                    }
+                }
+            };
+
             if let Some(idx) = window {
-                m.switch_window(&session, idx)?;
+                m.switch_window(&session_name, idx)?;
             }
-            // In a real terminal, we'd exec tmux attach. For now, print the command.
-            println!("tmux attach -t {session}");
+
+            exec_tmux_attach(&session_name);
         }
 
         Command::Kill { session } => {
@@ -187,7 +232,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        Command::New { name, cwd, color } => {
+        Command::New {
+            name,
+            cwd,
+            color,
+            detach,
+        } => {
             let cwd = if cwd == "." {
                 std::env::current_dir()?.to_string_lossy().to_string()
             } else {
@@ -207,10 +257,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
             m.save_profile(profile.clone())?;
             let info = m.launch(&profile.id)?;
+
             if cli.json {
                 println!("{}", serde_json::to_string_pretty(&info)?);
-            } else {
+            } else if detach {
                 println!("Created: {} ({})", info.display_name, info.session_name);
+            } else {
+                exec_tmux_attach(&info.session_name);
             }
         }
 
@@ -233,7 +286,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         "{} — {} [{} windows] {}",
                         s.session_name, s.display_name, s.window_count, s.color
                     );
-                    // Get detailed window info
                     if let Ok(windows) = m.client().list_windows(&s.session_name) {
                         for w in &windows {
                             let marker = if w.active { "→" } else { " " };
@@ -265,7 +317,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             ProfileAction::Delete { id } => {
-                // Find by name or ID
                 let profiles = m.list_profiles()?;
                 let found = profiles.iter().find(|p| p.name == id || p.id == id);
 

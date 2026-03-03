@@ -16,41 +16,58 @@ cargo install --path crates/muster-cli
 ## Quick Start
 
 ```bash
-# Create a profile for a project
-muster profile save "My Project" --cwd ~/work/myproject --color '#f97316'
+# Save a profile for a project
+muster profile save "PKM" --cwd ~/work/pkm --color '#f97316'
 
-# Launch a session from the profile
-muster launch "My Project"
+# Launch it — creates the tmux session and drops you in
+muster launch "PKM"
+# You're now inside a tmux session. Detach with Ctrl-b d to get back to your shell.
 
-# See what's running
+# From another terminal, check what's running
 muster status
 
-# Change a session's color live
-muster color muster_profile_abc123 '#00ff00'
+# Reattach to a running session by profile name
+muster launch "PKM"
 
-# Create an ad-hoc session (no saved profile)
-muster new "Scratch" --cwd /tmp --color '#808080'
+# Or attach by session name directly
+muster attach muster_profile_abc123
 
-# Destroy a session
-muster kill muster_profile_abc123
+# Create a quick throwaway session
+muster new "Scratch" --cwd /tmp
+# Again, you're immediately inside it.
+
+# Create without attaching (background)
+muster launch "PKM" --detach
+muster new "Background" --cwd /tmp --detach
 ```
+
+### Typical Workflow
+
+1. **`muster profile save`** — define a project (name, directory, color)
+2. **`muster launch <name>`** — start or reattach (execs `tmux attach`, replacing your shell)
+3. Work inside tmux. Use `Ctrl-b d` to detach back to your regular shell.
+4. **`muster launch <name>`** again to reattach later
+5. **`muster status`** from another terminal to see all sessions
+6. **`muster kill <session>`** when done
+
+`launch` is idempotent — if the session already exists, it attaches. If not, it creates from the profile and attaches.
 
 ## CLI Reference
 
 ```
-muster list                                    # List profiles and running sessions
-muster launch <profile-name-or-id>             # Launch or attach to a profile's session
+muster launch <profile-name-or-id> [--detach]  # Create/attach to a session (default: attaches)
 muster attach <session-name> [--window N]      # Attach to a running session
+muster new <name> [--cwd dir] [--color hex] [--detach]  # Create ad-hoc session
 muster kill <session-name>                     # Destroy a session
-muster new <name> [--cwd <dir>] [--color <hex>]  # Create ad-hoc session
+muster list                                    # List profiles and running sessions
+muster status                                  # Show sessions with window details
 muster color <session> <hex-color>             # Change session color live
-muster status                                  # Show all sessions with window details
-muster profile save <name> [--cwd <dir>] [--color <hex>]
+muster profile save <name> [--cwd dir] [--color hex]
 muster profile list
 muster profile delete <name-or-id>
 ```
 
-All commands accept `--json` for machine-readable output. Use `--config-dir` or `MUSTER_CONFIG_DIR` to override the default config directory (`~/.config/muster/`).
+`launch`, `attach`, and `new` replace the current process with `tmux attach` (via exec). Use `--detach` to create without attaching. `--json` is available on all commands for machine-readable output. `--config-dir` or `MUSTER_CONFIG_DIR` overrides the default config directory (`~/.config/muster/`).
 
 ## Concepts
 
