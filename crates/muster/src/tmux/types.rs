@@ -6,8 +6,8 @@ pub struct TmuxSession {
     pub attached: bool,
 }
 
-/// Application-level session info including @muster_* user option metadata.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Application-level session info including `@muster_*` user option metadata.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct SessionInfo {
     pub session_name: String,
     pub display_name: String,
