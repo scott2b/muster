@@ -82,73 +82,123 @@ pub fn contrast_fg(r: u8, g: u8, b: u8) -> &'static str {
     }
 }
 
-/// Build the list of tmux set-option commands for theming a session.
+/// Compute the theme values from a color and display name.
+pub struct ThemeValues {
+    pub color: String,
+    pub fg: String,
+    pub darker: String,
+    pub display_name: String,
+}
+
+impl ThemeValues {
+    pub fn new(color: &str, display_name: &str) -> Result<Self> {
+        let (r, g, b) = hex_to_rgb(color)?;
+        let (dr, dg, db) = compute_dimmed(r, g, b);
+        Ok(Self {
+            color: color.to_string(),
+            fg: contrast_fg(r, g, b).to_string(),
+            darker: rgb_to_hex(dr, dg, db),
+            display_name: display_name.to_string(),
+        })
+    }
+
+    /// Session-level options (status bar, position, mouse).
+    pub fn session_commands(&self, session: &str) -> Vec<Vec<String>> {
+        vec![
+            vec![
+                "set-option".into(),
+                "-t".into(),
+                session.into(),
+                "status-style".into(),
+                format!("bg={},fg={}", self.color, self.fg),
+            ],
+            vec![
+                "set-option".into(),
+                "-t".into(),
+                session.into(),
+                "status-left".into(),
+                format!(
+                    "#[bg={},fg=#ffffff,bold] {} #[default]",
+                    self.darker, self.display_name
+                ),
+            ],
+            vec![
+                "set-option".into(),
+                "-t".into(),
+                session.into(),
+                "status-position".into(),
+                "top".into(),
+            ],
+            vec![
+                "set-option".into(),
+                "-t".into(),
+                session.into(),
+                "mouse".into(),
+                "on".into(),
+            ],
+        ]
+    }
+
+    /// Window-level option key/value pairs for window-status styling.
+    pub fn window_options(&self) -> Vec<(String, String)> {
+        vec![
+            (
+                "window-status-format".into(),
+                format!("#[bg={},fg={}]  #I: #W  ", self.color, self.fg),
+            ),
+            (
+                "window-status-current-format".into(),
+                format!(
+                    "#[fg={},bg=#000000,bold]  #I: #W  #[default]",
+                    self.color
+                ),
+            ),
+            ("window-status-separator".into(), String::new()),
+        ]
+    }
+
+    /// Build the hook command string that applies window options to new windows.
+    pub fn hook_command(&self) -> String {
+        self.window_options()
+            .iter()
+            .map(|(k, v)| {
+                if v.is_empty() {
+                    format!("set-window-option {k} ''")
+                } else {
+                    format!("set-window-option {k} '{v}'")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ; ")
+    }
+}
+
+/// Build the list of tmux commands for theming a session (for testing).
 pub fn build_theme_commands(
     session: &str,
     color: &str,
     display_name: &str,
 ) -> Result<Vec<Vec<String>>> {
-    let (r, g, b) = hex_to_rgb(color)?;
-    let (dr, dg, db) = compute_dimmed(r, g, b);
-    let darker = rgb_to_hex(dr, dg, db);
-    let fg = contrast_fg(r, g, b);
-
-    let commands = vec![
-        vec![
+    let tv = ThemeValues::new(color, display_name)?;
+    let mut commands = tv.session_commands(session);
+    // Include window options as set-option for backward compat in tests
+    for (k, v) in tv.window_options() {
+        commands.push(vec![
             "set-option".into(),
             "-t".into(),
             session.into(),
-            "status-style".into(),
-            format!("bg={color},fg={fg}"),
-        ],
-        vec![
-            "set-option".into(),
-            "-t".into(),
-            session.into(),
-            "status-left".into(),
-            format!("#[bg={darker},fg=#ffffff,bold] {display_name} #[default]"),
-        ],
-        vec![
-            "set-option".into(),
-            "-t".into(),
-            session.into(),
-            "window-status-format".into(),
-            format!("#[fg={fg}]  #I: #W  "),
-        ],
-        vec![
-            "set-option".into(),
-            "-t".into(),
-            session.into(),
-            "window-status-current-format".into(),
-            format!("#[fg={color},bg=#000000,bold] #I: #W #[default]"),
-        ],
-        vec![
-            "set-option".into(),
-            "-t".into(),
-            session.into(),
-            "window-status-separator".into(),
-            String::new(),
-        ],
-        vec![
-            "set-option".into(),
-            "-t".into(),
-            session.into(),
-            "status-position".into(),
-            "top".into(),
-        ],
-        vec![
-            "set-option".into(),
-            "-t".into(),
-            session.into(),
-            "mouse".into(),
-            "on".into(),
-        ],
-    ];
+            k,
+            v,
+        ]);
+    }
     Ok(commands)
 }
 
 /// Apply the color theme to a running tmux session.
 /// Accepts hex colors (`#f97316`) or named colors (`orange`).
+///
+/// Sets session-level options directly and applies window-level options
+/// to each existing window, plus installs a hook for future windows.
 pub fn apply_theme(
     client: &TmuxClient,
     session: &str,
@@ -156,11 +206,32 @@ pub fn apply_theme(
     display_name: &str,
 ) -> Result<()> {
     let color = resolve_color(color)?;
-    let commands = build_theme_commands(session, &color, display_name)?;
-    for cmd in &commands {
+    let tv = ThemeValues::new(&color, display_name)?;
+
+    // Apply session-level options
+    for cmd in &tv.session_commands(session) {
         let args: Vec<&str> = cmd.iter().map(String::as_str).collect();
         client.cmd(&args)?;
     }
+
+    // Apply window-level options to each existing window
+    let windows = client.list_windows(session)?;
+    for win in &windows {
+        let target = format!("{session}:{}", win.index);
+        for (key, value) in &tv.window_options() {
+            client.cmd(&["set-window-option", "-t", &target, key, value])?;
+        }
+    }
+
+    // Install hook so future windows also get the window options
+    client.cmd(&[
+        "set-hook",
+        "-t",
+        session,
+        "after-new-window",
+        &tv.hook_command(),
+    ])?;
+
     Ok(())
 }
 
@@ -236,22 +307,29 @@ mod tests {
         let commands = build_theme_commands("muster_test", "#f97316", "PKM Project").unwrap();
         assert_eq!(commands.len(), 7);
 
-        // status-style
+        // Session options come first
         assert_eq!(commands[0][3], "status-style");
         assert!(commands[0][4].contains("bg=#f97316"));
 
-        // status-left includes display name and darker color
         assert_eq!(commands[1][3], "status-left");
         assert!(commands[1][4].contains("PKM Project"));
         assert!(commands[1][4].contains("#532607")); // dimmed
 
-        // window-status-current-format includes the color
-        assert_eq!(commands[3][3], "window-status-current-format");
-        assert!(commands[3][4].contains("#f97316"));
+        assert_eq!(commands[2][3], "status-position");
+        assert_eq!(commands[2][4], "top");
 
-        // status-position
-        assert_eq!(commands[5][3], "status-position");
-        assert_eq!(commands[5][4], "top");
+        assert_eq!(commands[3][3], "mouse");
+        assert_eq!(commands[3][4], "on");
+
+        // Window options follow
+        assert_eq!(commands[4][3], "window-status-format");
+        assert!(commands[4][4].contains("#f97316"));
+
+        assert_eq!(commands[5][3], "window-status-current-format");
+        assert!(commands[5][4].contains("#f97316"));
+        assert!(commands[5][4].contains("bg=#000000"));
+
+        assert_eq!(commands[6][3], "window-status-separator");
     }
 
     #[test]
