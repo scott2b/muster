@@ -34,6 +34,9 @@ dirs = "6"
 which = "7"
 uuid = { version = "1", features = ["v4"] }
 
+# TOML
+toml = "0.8"
+
 # Dev/test
 tempfile = "3"
 rstest = "0.25"

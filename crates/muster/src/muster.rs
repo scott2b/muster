@@ -97,6 +97,10 @@ impl Muster {
         self.profiles.update(profile)
     }
 
+    pub fn rename_profile(&self, old_id: &str, profile: Profile) -> Result<Profile> {
+        self.profiles.rename(old_id, profile)
+    }
+
     pub fn delete_profile(&self, id: &str) -> Result<()> {
         self.profiles.delete(id)
     }

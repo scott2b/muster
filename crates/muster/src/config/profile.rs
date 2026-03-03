@@ -132,6 +132,16 @@ impl ProfileStore {
         Ok(profile)
     }
 
+    pub fn rename(&self, old_id: &str, profile: Profile) -> Result<Profile> {
+        let mut file = self.load()?;
+        if file.profiles.remove(old_id).is_none() {
+            return Err(Error::ProfileNotFound(old_id.to_string()));
+        }
+        file.profiles.insert(profile.id.clone(), profile.clone());
+        self.save(&file)?;
+        Ok(profile)
+    }
+
     pub fn delete(&self, id: &str) -> Result<()> {
         let mut file = self.load()?;
         if file.profiles.remove(id).is_none() {

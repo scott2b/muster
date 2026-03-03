@@ -1,10 +1,10 @@
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write as _};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process;
 
 use clap::{Parser, Subcommand};
-use muster::{Muster, TabProfile};
+use muster::{Muster, Profile, TabProfile};
 
 #[derive(Parser)]
 #[command(name = "muster", version, about = "Terminal session group management")]
@@ -137,6 +137,38 @@ enum ProfileAction {
         #[arg(long)]
         command: Option<String>,
     },
+
+    /// Show a profile's full definition
+    Show {
+        /// Profile name or ID
+        id: String,
+    },
+
+    /// Edit a profile in $EDITOR
+    Edit {
+        /// Profile name or ID
+        id: String,
+    },
+
+    /// Update profile fields inline
+    Update {
+        /// Profile name or ID
+        id: String,
+        /// New display name
+        #[arg(long)]
+        name: Option<String>,
+        /// New color (hex or named)
+        #[arg(long)]
+        color: Option<String>,
+    },
+
+    /// Remove a tab from a profile
+    RemoveTab {
+        /// Profile name or ID
+        profile: String,
+        /// Tab name or 0-based index
+        tab: String,
+    },
 }
 
 /// Parse a `name:cwd[:command]` string into a `TabProfile`.
@@ -183,6 +215,74 @@ fn color_dot(hex: &str) -> String {
         format!("\x1b[38;2;{r};{g};{b}m●\x1b[0m")
     } else {
         "●".to_string()
+    }
+}
+
+/// TOML representation of a profile for interactive editing.
+/// Excludes `id` since it's derived from `name` via slugify.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct EditableProfile {
+    name: String,
+    color: String,
+    tabs: Vec<EditableTab>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct EditableTab {
+    name: String,
+    cwd: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    command: Option<String>,
+}
+
+impl From<&Profile> for EditableProfile {
+    fn from(p: &Profile) -> Self {
+        Self {
+            name: p.name.clone(),
+            color: p.color.clone(),
+            tabs: p
+                .tabs
+                .iter()
+                .map(|t| EditableTab {
+                    name: t.name.clone(),
+                    cwd: t.cwd.clone(),
+                    command: t.command.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl EditableProfile {
+    fn into_profile(self) -> Profile {
+        Profile {
+            id: muster::config::profile::slugify(&self.name),
+            name: self.name,
+            color: self.color,
+            tabs: self
+                .tabs
+                .into_iter()
+                .map(|t| TabProfile {
+                    name: t.name,
+                    cwd: t.cwd,
+                    command: t.command,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Resolve a profile by name or ID, exiting on failure.
+fn resolve_profile(m: &Muster, input: &str) -> Result<Profile, Box<dyn std::error::Error>> {
+    let profiles = m.list_profiles()?;
+    let found = profiles
+        .into_iter()
+        .find(|p| p.name == input || p.id == input);
+    if let Some(p) = found {
+        Ok(p)
+    } else {
+        eprintln!("Profile not found: {input}");
+        process::exit(1);
     }
 }
 
@@ -492,6 +592,201 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     println!(
                         "Added tab to {}: now {} tab(s)",
+                        saved.name,
+                        saved.tabs.len()
+                    );
+                }
+            }
+
+            ProfileAction::Show { id } => {
+                let p = resolve_profile(&m, &id)?;
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&p)?);
+                } else {
+                    println!("{} {} ({})", color_dot(&p.color), p.name, p.id);
+                    println!("  color: {}", p.color);
+                    for (i, tab) in p.tabs.iter().enumerate() {
+                        let cmd = tab
+                            .command
+                            .as_deref()
+                            .map_or(String::new(), |c| format!(" — {c}"));
+                        println!("  [{i}] {}: {}{cmd}", tab.name, tab.cwd);
+                    }
+                }
+            }
+
+            ProfileAction::Edit { id } => {
+                let p = resolve_profile(&m, &id)?;
+                let old_id = p.id.clone();
+                let editable = EditableProfile::from(&p);
+                let toml_str = toml::to_string_pretty(&editable)?;
+
+                let saved = loop {
+                    let mut tmp = tempfile::Builder::new()
+                        .suffix(".toml")
+                        .tempfile()?;
+                    tmp.write_all(toml_str.as_bytes())?;
+                    tmp.flush()?;
+
+                    let editor = std::env::var("EDITOR")
+                        .or_else(|_| std::env::var("VISUAL"))
+                        .unwrap_or_else(|_| "vi".to_string());
+
+                    let status = process::Command::new(&editor)
+                        .arg(tmp.path())
+                        .status()?;
+
+                    if !status.success() {
+                        eprintln!("Editor exited with non-zero status");
+                        process::exit(1);
+                    }
+
+                    let content = std::fs::read_to_string(tmp.path())?;
+                    let parsed: EditableProfile = match toml::from_str(&content) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            eprintln!("Parse error: {e}");
+                            eprint!("Retry? [Y/n] ");
+                            let mut answer = String::new();
+                            std::io::stdin().read_line(&mut answer)?;
+                            if answer.trim().eq_ignore_ascii_case("n") {
+                                eprintln!("Aborted.");
+                                process::exit(1);
+                            }
+                            continue;
+                        }
+                    };
+
+                    let mut profile = parsed.into_profile();
+
+                    // Validate color
+                    match muster::session::theme::resolve_color(&profile.color) {
+                        Ok(c) => profile.color = c,
+                        Err(e) => {
+                            eprintln!("Invalid color: {e}");
+                            eprint!("Retry? [Y/n] ");
+                            let mut answer = String::new();
+                            std::io::stdin().read_line(&mut answer)?;
+                            if answer.trim().eq_ignore_ascii_case("n") {
+                                eprintln!("Aborted.");
+                                process::exit(1);
+                            }
+                            continue;
+                        }
+                    }
+
+                    if profile.tabs.is_empty() {
+                        eprintln!("Profile must have at least one tab.");
+                        eprint!("Retry? [Y/n] ");
+                        let mut answer = String::new();
+                        std::io::stdin().read_line(&mut answer)?;
+                        if answer.trim().eq_ignore_ascii_case("n") {
+                            eprintln!("Aborted.");
+                            process::exit(1);
+                        }
+                        continue;
+                    }
+
+                    // Handle rename vs update
+                    let result = if profile.id == old_id {
+                        m.update_profile(profile)?
+                    } else {
+                        // Check for active session on old ID
+                        let session_name = format!("muster_{old_id}");
+                        if m.resolve_session(&old_id).is_ok() {
+                            eprintln!(
+                                "Cannot rename: session `{session_name}` is running. Kill it first."
+                            );
+                            process::exit(1);
+                        }
+                        m.rename_profile(&old_id, profile)?
+                    };
+
+                    break result;
+                };
+
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&saved)?);
+                } else {
+                    println!("Saved: {} ({})", saved.name, saved.id);
+                }
+            }
+
+            ProfileAction::Update { id, name, color } => {
+                if name.is_none() && color.is_none() {
+                    eprintln!("At least one of --name or --color is required.");
+                    process::exit(1);
+                }
+
+                let mut p = resolve_profile(&m, &id)?;
+                let old_id = p.id.clone();
+
+                if let Some(ref new_color) = color {
+                    p.color = muster::session::theme::resolve_color(new_color)?;
+                }
+
+                let saved = if let Some(ref new_name) = name {
+                    let new_id = muster::config::profile::slugify(new_name);
+                    if new_id != old_id {
+                        // Check for active session on old ID
+                        let session_name = format!("muster_{old_id}");
+                        if m.resolve_session(&old_id).is_ok() {
+                            eprintln!(
+                                "Kill session `{session_name}` before renaming."
+                            );
+                            process::exit(1);
+                        }
+                    }
+                    p.name.clone_from(new_name);
+                    p.id = new_id;
+                    if p.id == old_id {
+                        m.update_profile(p)?
+                    } else {
+                        m.rename_profile(&old_id, p)?
+                    }
+                } else {
+                    m.update_profile(p)?
+                };
+
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&saved)?);
+                } else {
+                    println!("Updated: {} ({})", saved.name, saved.id);
+                }
+            }
+
+            ProfileAction::RemoveTab { profile, tab } => {
+                let mut p = resolve_profile(&m, &profile)?;
+
+                let idx = if let Ok(i) = tab.parse::<usize>() {
+                    if i >= p.tabs.len() {
+                        eprintln!(
+                            "Tab index {i} out of range (profile has {} tab(s)).",
+                            p.tabs.len()
+                        );
+                        process::exit(1);
+                    }
+                    i
+                } else if let Some(i) = p.tabs.iter().position(|t| t.name == tab) {
+                    i
+                } else {
+                    eprintln!("Tab not found: {tab}");
+                    process::exit(1);
+                };
+
+                if p.tabs.len() == 1 {
+                    eprintln!("Cannot remove the last tab from a profile.");
+                    process::exit(1);
+                }
+
+                p.tabs.remove(idx);
+                let saved = m.update_profile(p)?;
+
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&saved)?);
+                } else {
+                    println!(
+                        "Removed tab from {}: now {} tab(s)",
                         saved.name,
                         saved.tabs.len()
                     );
