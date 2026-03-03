@@ -79,6 +79,12 @@ enum Command {
         profile: Option<String>,
     },
 
+    /// Show listening ports inside sessions
+    Ports {
+        /// Profile name or ID (shows all sessions if omitted)
+        profile: Option<String>,
+    },
+
     /// Show all sessions with details
     Status,
 
@@ -330,6 +336,26 @@ struct ProcessTree {
     children: Vec<ProcessTree>,
 }
 
+/// Parse `ps -eo pid,ppid,comm` output into a process table.
+fn parse_process_table(output: &str) -> Vec<ProcessInfo> {
+    output
+        .lines()
+        .skip(1) // skip header
+        .filter_map(|line| {
+            let line = line.trim();
+            let mut tokens = line.split_whitespace();
+            let pid: u32 = tokens.next()?.parse().ok()?;
+            let parent: u32 = tokens.next()?.parse().ok()?;
+            // Rejoin the rest — command may contain spaces
+            let command: String = tokens.collect::<Vec<_>>().join(" ");
+            if command.is_empty() {
+                return None;
+            }
+            Some(ProcessInfo { pid, ppid: parent, command })
+        })
+        .collect()
+}
+
 /// Run `ps -eo pid,ppid,comm` and parse the full process table.
 fn build_process_table() -> Vec<ProcessInfo> {
     let output = match std::process::Command::new("ps")
@@ -339,19 +365,7 @@ fn build_process_table() -> Vec<ProcessInfo> {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
         _ => return Vec::new(),
     };
-
-    output
-        .lines()
-        .skip(1) // skip header
-        .filter_map(|line| {
-            let line = line.trim();
-            let mut parts = line.splitn(3, char::is_whitespace);
-            let pid: u32 = parts.next()?.trim().parse().ok()?;
-            let parent: u32 = parts.next()?.trim().parse().ok()?;
-            let command = parts.next()?.trim().to_string();
-            Some(ProcessInfo { pid, ppid: parent, command })
-        })
-        .collect()
+    parse_process_table(&output)
 }
 
 /// Build a process tree rooted at `root_pid` from the system process table.
@@ -383,6 +397,80 @@ fn render_tree(tree: &[ProcessTree], prefix: &str) {
         };
         render_tree(&node.children, &child_prefix);
     }
+}
+
+// ---- Listening port support for `muster ports` ----
+
+struct MatchedPort {
+    port: u16,
+    address: String,
+    pid: u32,
+    command: String,
+    session_name: String,
+    display_name: String,
+    color: String,
+    window_index: u32,
+    window_name: String,
+}
+
+struct ListeningPort {
+    pid: u32,
+    port: u16,
+    address: String,
+    command: String,
+}
+
+/// Parse `lsof -i -P -n -sTCP:LISTEN` output into listening port entries.
+fn parse_listening_ports(output: &str) -> Vec<ListeningPort> {
+    output
+        .lines()
+        .skip(1) // skip header
+        .filter_map(|line| {
+            // Columns: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols.len() < 10 {
+                return None;
+            }
+            let command = cols[0].to_string();
+            let pid: u32 = cols[1].parse().ok()?;
+            // NAME field is second-to-last: "*:8000 (LISTEN)" splits into
+            // [..., "*:8000", "(LISTEN)"]
+            let name = cols[cols.len() - 2];
+            let (address, port_str) = name.rsplit_once(':')?;
+            let port: u16 = port_str.parse().ok()?;
+            Some(ListeningPort {
+                pid,
+                port,
+                address: address.to_string(),
+                command,
+            })
+        })
+        .collect()
+}
+
+/// Run `lsof -i -P -n -sTCP:LISTEN` and parse all listening TCP ports.
+/// Returns `None` if lsof is unavailable or fails, `Some(vec)` on success.
+fn build_listening_ports() -> Option<Vec<ListeningPort>> {
+    let output = match std::process::Command::new("lsof")
+        .args(["-i", "-P", "-n", "-sTCP:LISTEN"])
+        .output()
+    {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        // lsof exits with 1 when there are no results — still a successful run
+        Ok(o) if o.status.code() == Some(1) => return Some(Vec::new()),
+        _ => return None,
+    };
+    Some(parse_listening_ports(&output))
+}
+
+/// Recursively collect all PIDs from a process tree.
+fn collect_pids(tree: &[ProcessTree]) -> Vec<u32> {
+    let mut pids = Vec::new();
+    for node in tree {
+        pids.push(node.pid);
+        pids.extend(collect_pids(&node.children));
+    }
+    pids
 }
 
 #[allow(clippy::too_many_lines)]
@@ -503,30 +591,27 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Command::Color { session, color } => {
-            match m.resolve_session(&session) {
-                Ok(session_name) => {
-                    m.set_color(&session_name, &color)?;
-                    if !cli.json {
-                        println!("Color updated: {session_name} → {color}");
-                    }
+            if let Ok(session_name) = m.resolve_session(&session) {
+                m.set_color(&session_name, &color)?;
+                if !cli.json {
+                    println!("Color updated: {session_name} → {color}");
                 }
-                Err(_) => {
-                    // No running session — try updating the profile directly
-                    let profiles = m.list_profiles()?;
-                    let found = profiles
-                        .iter()
-                        .find(|p| p.name == session || p.id == session);
-                    let Some(p) = found else {
-                        eprintln!("No session or profile found: {session}");
-                        process::exit(1);
-                    };
-                    let resolved = muster::session::theme::resolve_color(&color)?;
-                    let mut profile = p.clone();
-                    profile.color = resolved;
-                    m.update_profile(profile)?;
-                    if !cli.json {
-                        println!("Color updated: {} → {color}", p.name);
-                    }
+            } else {
+                // No running session — try updating the profile directly
+                let profiles = m.list_profiles()?;
+                let found = profiles
+                    .iter()
+                    .find(|p| p.name == session || p.id == session);
+                let Some(p) = found else {
+                    eprintln!("No session or profile found: {session}");
+                    process::exit(1);
+                };
+                let resolved = muster::session::theme::resolve_color(&color)?;
+                let mut profile = p.clone();
+                profile.color = resolved;
+                m.update_profile(profile)?;
+                if !cli.json {
+                    println!("Color updated: {} → {color}", p.name);
                 }
             }
         }
@@ -633,6 +718,161 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                                     render_tree(&children, "        ");
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        Command::Ports { profile } => {
+            let mut sessions = m.list_sessions()?;
+
+            if let Some(ref filter) = profile {
+                sessions.retain(|s| {
+                    s.display_name == *filter
+                        || s.profile_id.as_deref() == Some(filter)
+                        || s.session_name == *filter
+                });
+                if sessions.is_empty() {
+                    eprintln!("No session found for: {filter}");
+                    process::exit(1);
+                }
+            }
+
+            if sessions.is_empty() {
+                if cli.json {
+                    println!("[]");
+                } else {
+                    println!("No active sessions.");
+                }
+            } else {
+                let Some(listening) = build_listening_ports() else {
+                    eprintln!("Could not query listening ports: lsof not found or failed.");
+                    process::exit(1);
+                };
+                if listening.is_empty() {
+                    if cli.json {
+                        println!("[]");
+                    } else {
+                        println!("No listening ports found in muster sessions.");
+                    }
+                } else {
+                    let proc_table = build_process_table();
+
+                    // Build a PID -> (session, window_index, window_name) lookup
+                    // across all sessions
+                    let mut pid_lookup: std::collections::HashMap<
+                        u32,
+                        (String, String, String, u32, String),
+                    > = std::collections::HashMap::new();
+
+                    for s in &sessions {
+                        let panes = m.client().list_panes(&s.session_name).unwrap_or_default();
+                        let windows = m.client().list_windows(&s.session_name).unwrap_or_default();
+
+                        // Map window index -> name
+                        let window_names: std::collections::HashMap<u32, String> = windows
+                            .iter()
+                            .map(|w| (w.index, w.name.clone()))
+                            .collect();
+
+                        for pane in &panes {
+                            // Build tree from pane PID and collect all descendant PIDs
+                            let tree = build_tree(pane.pid, &proc_table);
+                            let mut all_pids = vec![pane.pid];
+                            all_pids.extend(collect_pids(&tree));
+
+                            let window_name = window_names
+                                .get(&pane.window_index)
+                                .cloned()
+                                .unwrap_or_default();
+
+                            for pid in all_pids {
+                                pid_lookup.entry(pid).or_insert_with(|| {
+                                    (
+                                        s.session_name.clone(),
+                                        s.display_name.clone(),
+                                        s.color.clone(),
+                                        pane.window_index,
+                                        window_name.clone(),
+                                    )
+                                });
+                            }
+                        }
+                    }
+
+                    // Match listening ports to sessions
+                    let mut matched: Vec<MatchedPort> = listening
+                        .iter()
+                        .filter_map(|lp| {
+                            pid_lookup.get(&lp.pid).map(
+                                |(session_name, display_name, color, window_index, window_name)| {
+                                    MatchedPort {
+                                        port: lp.port,
+                                        address: lp.address.clone(),
+                                        pid: lp.pid,
+                                        command: lp.command.clone(),
+                                        session_name: session_name.clone(),
+                                        display_name: display_name.clone(),
+                                        color: color.clone(),
+                                        window_index: *window_index,
+                                        window_name: window_name.clone(),
+                                    }
+                                },
+                            )
+                        })
+                        .collect();
+
+                    if matched.is_empty() {
+                        if cli.json {
+                            println!("[]");
+                        } else {
+                            println!("No listening ports found in muster sessions.");
+                        }
+                    } else if cli.json {
+                        let json_ports: Vec<serde_json::Value> = matched
+                            .iter()
+                            .map(|mp| {
+                                serde_json::json!({
+                                    "port": mp.port,
+                                    "address": mp.address,
+                                    "pid": mp.pid,
+                                    "command": mp.command,
+                                    "session": mp.session_name,
+                                    "display_name": mp.display_name,
+                                    "color": mp.color,
+                                    "window_index": mp.window_index,
+                                    "window_name": mp.window_name,
+                                })
+                            })
+                            .collect();
+                        println!("{}", serde_json::to_string_pretty(&json_ports)?);
+                    } else {
+                        // Group by session, sort ports within each group
+                        matched.sort_by(|a, b| {
+                            a.session_name
+                                .cmp(&b.session_name)
+                                .then(a.port.cmp(&b.port))
+                        });
+
+                        let mut current_session = String::new();
+                        for mp in &matched {
+                            if mp.session_name != current_session {
+                                if !current_session.is_empty() {
+                                    println!();
+                                }
+                                println!(
+                                    "{} {} ({})",
+                                    color_dot(&mp.color),
+                                    mp.display_name,
+                                    mp.session_name,
+                                );
+                                current_session.clone_from(&mp.session_name);
+                            }
+                            println!(
+                                "  :{:<6} {:<16} [{}] {}",
+                                mp.port, mp.command, mp.window_index, mp.window_name,
+                            );
                         }
                     }
                 }
@@ -990,5 +1230,242 @@ fn main() {
     if let Err(e) = run() {
         eprintln!("Error: {e}");
         process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- parse_process_table tests ----
+
+    #[test]
+    fn parse_ps_basic() {
+        let output = "  PID  PPID COMM\n    1     0 /sbin/launchd\n  100     1 /usr/sbin/syslogd\n  200   100 /usr/bin/some_daemon\n";
+        let table = parse_process_table(output);
+        assert_eq!(table.len(), 3);
+        assert_eq!(table[0].pid, 1);
+        assert_eq!(table[0].ppid, 0);
+        assert_eq!(table[0].command, "/sbin/launchd");
+        assert_eq!(table[1].pid, 100);
+        assert_eq!(table[1].ppid, 1);
+        assert_eq!(table[2].pid, 200);
+        assert_eq!(table[2].ppid, 100);
+    }
+
+    #[test]
+    fn parse_ps_empty_output() {
+        let output = "  PID  PPID COMM\n";
+        let table = parse_process_table(output);
+        assert!(table.is_empty());
+    }
+
+    #[test]
+    fn parse_ps_command_with_spaces() {
+        let output = "  PID  PPID COMM\n  500   100 /usr/local/bin/my tool\n";
+        let table = parse_process_table(output);
+        assert_eq!(table.len(), 1);
+        assert_eq!(table[0].command, "/usr/local/bin/my tool");
+    }
+
+    #[test]
+    fn parse_ps_skips_malformed_lines() {
+        let output = "  PID  PPID COMM\n  notapid  1 /bin/sh\n  100     1 /usr/bin/daemon\n  abc   def ghi\n";
+        let table = parse_process_table(output);
+        assert_eq!(table.len(), 1);
+        assert_eq!(table[0].pid, 100);
+    }
+
+    // ---- build_tree tests ----
+
+    fn sample_process_table() -> Vec<ProcessInfo> {
+        // Tree structure:
+        //   1 (init)
+        //   ├─ 10 (fish)
+        //   │  ├─ 100 (npm)
+        //   │  │  └─ 101 (node)
+        //   │  └─ 102 (cargo)
+        //   └─ 20 (bash)
+        vec![
+            ProcessInfo { pid: 10, ppid: 1, command: "fish".into() },
+            ProcessInfo { pid: 20, ppid: 1, command: "bash".into() },
+            ProcessInfo { pid: 100, ppid: 10, command: "npm".into() },
+            ProcessInfo { pid: 101, ppid: 100, command: "node".into() },
+            ProcessInfo { pid: 102, ppid: 10, command: "cargo".into() },
+        ]
+    }
+
+    #[test]
+    fn build_tree_from_root() {
+        let table = sample_process_table();
+        let tree = build_tree(1, &table);
+        assert_eq!(tree.len(), 2); // fish and bash
+        assert_eq!(tree[0].command, "fish");
+        assert_eq!(tree[0].children.len(), 2); // npm and cargo
+        assert_eq!(tree[1].command, "bash");
+        assert!(tree[1].children.is_empty());
+    }
+
+    #[test]
+    fn build_tree_from_subtree() {
+        let table = sample_process_table();
+        let tree = build_tree(10, &table);
+        assert_eq!(tree.len(), 2); // npm, cargo
+        let npm = &tree[0];
+        assert_eq!(npm.command, "npm");
+        assert_eq!(npm.children.len(), 1);
+        assert_eq!(npm.children[0].command, "node");
+    }
+
+    #[test]
+    fn build_tree_leaf_node() {
+        let table = sample_process_table();
+        let tree = build_tree(101, &table);
+        assert!(tree.is_empty()); // node has no children
+    }
+
+    #[test]
+    fn build_tree_nonexistent_root() {
+        let table = sample_process_table();
+        let tree = build_tree(9999, &table);
+        assert!(tree.is_empty());
+    }
+
+    // ---- collect_pids tests ----
+
+    #[test]
+    fn collect_pids_full_tree() {
+        let table = sample_process_table();
+        let tree = build_tree(1, &table);
+        let mut pids = collect_pids(&tree);
+        pids.sort();
+        assert_eq!(pids, vec![10, 20, 100, 101, 102]);
+    }
+
+    #[test]
+    fn collect_pids_subtree() {
+        let table = sample_process_table();
+        let tree = build_tree(10, &table);
+        let mut pids = collect_pids(&tree);
+        pids.sort();
+        assert_eq!(pids, vec![100, 101, 102]);
+    }
+
+    #[test]
+    fn collect_pids_empty_tree() {
+        let pids = collect_pids(&[]);
+        assert!(pids.is_empty());
+    }
+
+    // ---- parse_listening_ports tests ----
+
+    #[test]
+    fn parse_lsof_basic() {
+        let output = "\
+COMMAND     PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+python3.1 12345  usr    4u  IPv4 0xabcdef1234567890      0t0  TCP *:8000 (LISTEN)
+node      23456  usr   21u  IPv6 0x1234567890abcdef      0t0  TCP [::1]:5173 (LISTEN)
+";
+        let ports = parse_listening_ports(output);
+        assert_eq!(ports.len(), 2);
+
+        assert_eq!(ports[0].command, "python3.1");
+        assert_eq!(ports[0].pid, 12345);
+        assert_eq!(ports[0].port, 8000);
+        assert_eq!(ports[0].address, "*");
+
+        assert_eq!(ports[1].command, "node");
+        assert_eq!(ports[1].pid, 23456);
+        assert_eq!(ports[1].port, 5173);
+        assert_eq!(ports[1].address, "[::1]");
+    }
+
+    #[test]
+    fn parse_lsof_localhost() {
+        let output = "\
+COMMAND   PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+Obsidian 9999  usr   36u  IPv4 0xaabbccdd11223344      0t0  TCP 127.0.0.1:27124 (LISTEN)
+";
+        let ports = parse_listening_ports(output);
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].address, "127.0.0.1");
+        assert_eq!(ports[0].port, 27124);
+    }
+
+    #[test]
+    fn parse_lsof_empty_output() {
+        let output = "COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME\n";
+        let ports = parse_listening_ports(output);
+        assert!(ports.is_empty());
+    }
+
+    #[test]
+    fn parse_lsof_skips_short_lines() {
+        let output = "\
+COMMAND     PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+short line
+python3   12345  usr    4u  IPv4 0xabcdef1234567890      0t0  TCP *:9000 (LISTEN)
+";
+        let ports = parse_listening_ports(output);
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].port, 9000);
+    }
+
+    #[test]
+    fn parse_lsof_ipv6_wildcard() {
+        let output = "\
+COMMAND     PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+node      11111  usr   19u  IPv6 0xdeadbeef12345678      0t0  TCP *:3000 (LISTEN)
+";
+        let ports = parse_listening_ports(output);
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].address, "*");
+        assert_eq!(ports[0].port, 3000);
+    }
+
+    #[test]
+    fn parse_lsof_multiple_ports_same_process() {
+        let output = "\
+COMMAND     PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+node      11111  usr   19u  IPv4 0xaaaa000000000001      0t0  TCP *:3000 (LISTEN)
+node      11111  usr   20u  IPv6 0xaaaa000000000002      0t0  TCP *:3000 (LISTEN)
+node      11111  usr   21u  IPv4 0xaaaa000000000003      0t0  TCP 127.0.0.1:3001 (LISTEN)
+";
+        let ports = parse_listening_ports(output);
+        assert_eq!(ports.len(), 3);
+        // All same PID
+        assert!(ports.iter().all(|p| p.pid == 11111));
+        assert_eq!(ports[0].port, 3000);
+        assert_eq!(ports[2].port, 3001);
+        assert_eq!(ports[2].address, "127.0.0.1");
+    }
+
+    // ---- parse_tab tests ----
+
+    #[test]
+    fn parse_tab_name_and_cwd() {
+        let tab = parse_tab("Shell:/home/user").unwrap();
+        assert_eq!(tab.name, "Shell");
+        assert_eq!(tab.cwd, "/home/user");
+        assert!(tab.command.is_none());
+    }
+
+    #[test]
+    fn parse_tab_with_command() {
+        let tab = parse_tab("Dev:/home/user:npm run dev").unwrap();
+        assert_eq!(tab.name, "Dev");
+        assert_eq!(tab.cwd, "/home/user");
+        assert_eq!(tab.command.as_deref(), Some("npm run dev"));
+    }
+
+    #[test]
+    fn parse_tab_empty_command_becomes_none() {
+        let tab = parse_tab("Shell:/home/user:").unwrap();
+        assert!(tab.command.is_none());
+    }
+
+    #[test]
+    fn parse_tab_missing_cwd_fails() {
+        assert!(parse_tab("Shell").is_err());
     }
 }
