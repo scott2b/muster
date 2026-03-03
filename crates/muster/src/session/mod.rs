@@ -41,10 +41,9 @@ pub fn create_from_profile(
     // Create the session with the first window
     client.new_session(&session_name, &first_tab.name, &first_tab.cwd, shell)?;
 
-    // Set default-command so manually-created panes also use the right shell with correct $SHELL
+    // Set default-command so manually-created panes also use the right shell
     if let Some(sh) = shell {
-        let default_cmd = format!("env SHELL={sh} {sh}");
-        client.set_option(&session_name, "default-command", &default_cmd)?;
+        client.set_option(&session_name, "default-command", sh)?;
     }
 
     // Send startup command for first tab if specified
