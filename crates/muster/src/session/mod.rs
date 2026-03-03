@@ -38,27 +38,10 @@ pub fn create_from_profile(
         command: None,
     });
 
-    // tmux sets $SHELL in pane processes from the global `default-shell` option.
-    // Temporarily set it to the resolved shell so the session gets the right value.
-    let prev_default_shell = if let Some(sh) = shell {
-        let prev = client.get_global_option("default-shell")?;
-        client.set_global_option("default-shell", sh)?;
-        prev
-    } else {
-        None
-    };
-
     // Create the session with the first window
-    let create_result = client.new_session(&session_name, &first_tab.name, &first_tab.cwd, shell);
+    client.new_session(&session_name, &first_tab.name, &first_tab.cwd, shell)?;
 
-    // Restore default-shell immediately
-    if let Some(ref prev) = prev_default_shell {
-        client.set_global_option("default-shell", prev)?;
-    }
-
-    create_result?;
-
-    // Set default-command so manually-created panes also use the right shell
+    // Set default-command so panes the user creates manually also use the right shell
     if let Some(sh) = shell {
         client.set_option(&session_name, "default-command", sh)?;
     }

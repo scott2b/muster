@@ -52,9 +52,8 @@ impl TmuxClient {
 
     /// Create a new detached session.
     ///
-    /// Propagates the current process environment to the initial pane via `-e` flags,
-    /// since tmux otherwise inherits from the (potentially stale) server environment.
-    /// If `shell` is provided, it is used as the shell command for the initial window.
+    /// If `shell` is provided, it is used as the shell command for the initial window
+    /// (instead of tmux's `default-shell`).
     pub fn new_session(
         &self,
         name: &str,
@@ -62,15 +61,7 @@ impl TmuxClient {
         cwd: &str,
         shell: Option<&str>,
     ) -> Result<()> {
-        let env_pairs: Vec<String> = std::env::vars()
-            .filter(|(k, _)| !k.starts_with("TMUX") && k != "TERM")
-            .map(|(k, v)| format!("{k}={v}"))
-            .collect();
         let mut args = vec!["new-session", "-d", "-s", name, "-n", first_window_name, "-c", cwd];
-        for pair in &env_pairs {
-            args.push("-e");
-            args.push(pair);
-        }
         if let Some(sh) = shell {
             args.push(sh);
         }
@@ -190,37 +181,6 @@ impl TmuxClient {
     }
 
     // ---- User option (metadata) methods ----
-
-    /// Set a tmux session environment variable.
-    pub fn set_environment(&self, session: &str, name: &str, value: &str) -> Result<()> {
-        self.cmd(&["set-environment", "-t", session, name, value])?;
-        Ok(())
-    }
-
-    /// Set a global tmux server option.
-    pub fn set_global_option(&self, key: &str, value: &str) -> Result<()> {
-        self.cmd(&["set-option", "-g", key, value])?;
-        Ok(())
-    }
-
-    /// Get a global tmux server option.
-    pub fn get_global_option(&self, key: &str) -> Result<Option<String>> {
-        let output = Command::new(&self.tmux_path)
-            .args(["show-option", "-gv", key])
-            .output()
-            .map_err(|e| Error::TmuxError(format!("failed to spawn tmux: {e}")))?;
-
-        if output.status.success() {
-            let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if value.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(value))
-            }
-        } else {
-            Ok(None)
-        }
-    }
 
     /// Set a tmux user option on a session.
     pub fn set_option(&self, session: &str, key: &str, value: &str) -> Result<()> {
