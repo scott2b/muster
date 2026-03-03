@@ -61,14 +61,10 @@ impl TmuxClient {
         cwd: &str,
         shell: Option<&str>,
     ) -> Result<()> {
-        let shell_env = shell.map(|sh| format!("SHELL={sh}"));
+        let shell_cmd = shell.map(|sh| format!("env SHELL={sh} {sh}"));
         let mut args = vec!["new-session", "-d", "-s", name, "-n", first_window_name, "-c", cwd];
-        if let Some(ref env_val) = shell_env {
-            args.push("-e");
-            args.push(env_val);
-        }
-        if let Some(sh) = shell {
-            args.push(sh);
+        if let Some(ref cmd) = shell_cmd {
+            args.push(cmd);
         }
         self.cmd(&args)?;
         Ok(())
@@ -90,9 +86,10 @@ impl TmuxClient {
         cwd: &str,
         shell: Option<&str>,
     ) -> Result<()> {
+        let shell_cmd = shell.map(|sh| format!("env SHELL={sh} {sh}"));
         let mut args = vec!["new-window", "-t", session, "-n", name, "-c", cwd];
-        if let Some(sh) = shell {
-            args.push(sh);
+        if let Some(ref cmd) = shell_cmd {
+            args.push(cmd);
         }
         self.cmd(&args)?;
         Ok(())
