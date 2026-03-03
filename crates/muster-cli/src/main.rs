@@ -243,6 +243,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 cwd
             };
+            let color = muster::session::theme::resolve_color(&color)?;
 
             let profile = muster::Profile {
                 id: format!("adhoc_{}", uuid::Uuid::new_v4()),
@@ -338,6 +339,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     cwd
                 };
+                let color = muster::session::theme::resolve_color(&color)?;
 
                 let profile = muster::Profile {
                     id: format!("profile_{}", uuid::Uuid::new_v4()),

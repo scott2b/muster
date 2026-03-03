@@ -1,6 +1,51 @@
 use crate::error::{Error, Result};
 use crate::tmux::client::TmuxClient;
 
+/// Resolve a named color to its hex value. Returns None if not a known name.
+fn named_color_to_hex(name: &str) -> Option<&'static str> {
+    match name.to_lowercase().as_str() {
+        "black" => Some("#000000"),
+        "red" => Some("#cc0000"),
+        "green" => Some("#4e9a06"),
+        "yellow" => Some("#c4a000"),
+        "blue" => Some("#3465a4"),
+        "magenta" => Some("#75507b"),
+        "cyan" => Some("#06989a"),
+        "white" => Some("#d3d7cf"),
+        "orange" => Some("#f97316"),
+        "pink" => Some("#ec4899"),
+        "purple" | "violet" => Some("#8b5cf6"),
+        "teal" => Some("#14b8a6"),
+        "lime" => Some("#84cc16"),
+        "amber" => Some("#f59e0b"),
+        "rose" => Some("#f43f5e"),
+        "indigo" => Some("#6366f1"),
+        "sky" => Some("#0ea5e9"),
+        "emerald" => Some("#10b981"),
+        "fuchsia" => Some("#d946ef"),
+        "slate" => Some("#64748b"),
+        "zinc" => Some("#71717a"),
+        "stone" => Some("#78716c"),
+        "gray" | "grey" => Some("#808080"),
+        _ => None,
+    }
+}
+
+/// Resolve a color string to hex. Accepts `#RRGGBB`, `RRGGBB`, or a named color.
+pub fn resolve_color(color: &str) -> Result<String> {
+    if let Some(hex) = named_color_to_hex(color) {
+        return Ok(hex.to_string());
+    }
+    // Validate as hex
+    hex_to_rgb(color)?;
+    // Normalize to #RRGGBB
+    if color.starts_with('#') {
+        Ok(color.to_string())
+    } else {
+        Ok(format!("#{color}"))
+    }
+}
+
 /// Parse a hex color string (#RRGGBB) into (r, g, b).
 pub fn hex_to_rgb(hex: &str) -> Result<(u8, u8, u8)> {
     let hex = hex.strip_prefix('#').unwrap_or(hex);
@@ -91,13 +136,15 @@ pub fn build_theme_commands(
 }
 
 /// Apply the color theme to a running tmux session.
+/// Accepts hex colors (`#f97316`) or named colors (`orange`).
 pub fn apply_theme(
     client: &TmuxClient,
     session: &str,
     color: &str,
     display_name: &str,
 ) -> Result<()> {
-    let commands = build_theme_commands(session, color, display_name)?;
+    let color = resolve_color(color)?;
+    let commands = build_theme_commands(session, &color, display_name)?;
     for cmd in &commands {
         let args: Vec<&str> = cmd.iter().map(String::as_str).collect();
         client.cmd(&args)?;
@@ -106,16 +153,16 @@ pub fn apply_theme(
 }
 
 /// Change a session's color: update the `@muster_color` option and re-apply theme.
+/// Accepts hex colors (`#f97316`) or named colors (`orange`).
 pub fn set_color(
     client: &TmuxClient,
     session: &str,
     color: &str,
     display_name: &str,
 ) -> Result<()> {
-    // Validate the color first
-    hex_to_rgb(color)?;
-    client.set_option(session, "@muster_color", color)?;
-    apply_theme(client, session, color, display_name)
+    let color = resolve_color(color)?;
+    client.set_option(session, "@muster_color", &color)?;
+    apply_theme(client, session, &color, display_name)
 }
 
 #[cfg(test)]
@@ -149,6 +196,27 @@ mod tests {
         assert_eq!(rgb_to_hex(249, 115, 22), "#f97316");
         assert_eq!(rgb_to_hex(0, 0, 0), "#000000");
         assert_eq!(rgb_to_hex(255, 255, 255), "#ffffff");
+    }
+
+    #[test]
+    fn test_resolve_color_hex() {
+        assert_eq!(resolve_color("#f97316").unwrap(), "#f97316");
+        assert_eq!(resolve_color("ff0000").unwrap(), "#ff0000");
+    }
+
+    #[test]
+    fn test_resolve_color_named() {
+        assert_eq!(resolve_color("orange").unwrap(), "#f97316");
+        assert_eq!(resolve_color("Orange").unwrap(), "#f97316");
+        assert_eq!(resolve_color("BLUE").unwrap(), "#3465a4");
+        assert_eq!(resolve_color("gray").unwrap(), "#808080");
+        assert_eq!(resolve_color("grey").unwrap(), "#808080");
+    }
+
+    #[test]
+    fn test_resolve_color_invalid() {
+        assert!(resolve_color("notacolor").is_err());
+        assert!(resolve_color("").is_err());
     }
 
     #[test]
