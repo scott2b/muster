@@ -113,10 +113,9 @@ crates/
 | `tmux::control` | Control mode connection, event stream parsing (`MusterEvent`) |
 | `tmux::types` | `TmuxSession`, `TmuxWindow`, `SessionInfo` |
 | `config::profile` | Profile CRUD with atomic JSON persistence |
-| `config::settings` | Settings (emulator preference, tmux path) |
+| `config::settings` | Settings (tmux path, shell preference) |
 | `session` | Session lifecycle — create from profile, destroy |
 | `session::theme` | Hex color parsing, dimming, tmux status bar styling |
-| `emulator` | `Emulator` trait + Ghostty implementation |
 | `muster` | `Muster` facade tying everything together |
 
 ### Library Usage
@@ -193,14 +192,12 @@ These are parsed into `MusterEvent` variants and distributed via `tokio::broadca
 
 ```json
 {
-  "emulator": "ghostty",
-  "emulator_path": null,
   "tmux_path": null,
   "shell": "/usr/local/bin/fish"
 }
 ```
 
-`shell` overrides the default shell for new tmux panes. If omitted, muster uses `$SHELL`. Set this if your `$SHELL` differs from the shell you actually use (common on macOS where `$SHELL` defaults to `/bin/zsh`).
+`shell` overrides the default shell for new tmux panes. If omitted, muster uses `$SHELL`. Set this if your `$SHELL` differs from the shell you actually use (common on macOS where `$SHELL` defaults to `/bin/zsh`). `tmux_path` overrides tmux discovery from `$PATH`.
 
 ## Testing
 

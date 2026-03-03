@@ -28,7 +28,6 @@ The terminal management core is implemented as a **standalone Rust library crate
 - Manages terminal group profiles (CRUD on saved configurations)
 - Interfaces with tmux (session lifecycle, control mode connections, state observation)
 - Applies themes and styling to tmux sessions
-- Abstracts the terminal emulator layer (Ghostty today, extensible to others)
 - Provides a testable API with no dependency on Tauri or any GUI framework
 
 The tmux bindings are written in-house rather than depending on an external crate. The only existing Rust tmux library (`tmux_interface`, 64 stars) is self-described as experimental, has control mode listed as unimplemented, and wraps all 90 tmux commands when we need ~20. More importantly, the novel value of this library — control mode event streaming — is precisely what no existing Rust crate provides. The bindings are part of the product, not an implementation detail.
@@ -50,7 +49,7 @@ There are exactly two sources of truth:
 | Source | Owns | Accessed by |
 |--------|------|-------------|
 | **tmux** | All running session state: windows, CWDs, active window, plus application metadata stored as user options (`@muster_name`, `@muster_color`, `@muster_profile`) | Library reads via control mode + CLI commands |
-| **Config directory** | Saved profiles (templates for creating sessions) and tool settings (emulator preference, paths) | Library reads/writes JSON files |
+| **Config directory** | Saved profiles (templates for creating sessions) and tool settings (tmux path, shell preference) | Library reads/writes JSON files |
 
 There is no application-level cache of tmux state. There is no runtime state file. When the GUI or CLI needs to know what tabs a group has, it asks tmux. When it needs the group's color, it asks tmux. The config directory stores only user-authored configuration (profiles, settings), never derived or runtime state.
 
@@ -84,12 +83,7 @@ There is no application-level cache of tmux state. There is no runtime state fil
      │ Config │ │      tmux       │
      │  dir   │ │  (sessions,     │
      │ (JSON) │ │   control mode) │
-     └────────┘ └────────┬────────┘
-                         │
-                  ┌──────▼───────┐
-                  │   Ghostty    │
-                  │  (rendering) │
-                  └──────────────┘
+     └────────┘ └─────────────────┘
 ```
 
 ### 2.4 Data Flow Principles
@@ -110,7 +104,7 @@ There is no application-level cache of tmux state. There is no runtime state fil
 ```
 ~/.config/muster/
 ├── profiles.json             # Saved terminal group profiles
-└── settings.json             # Global settings (emulator preference, paths, etc.)
+└── settings.json             # Global settings (tmux path, shell preference)
 ```
 
 That's it. No runtime state file. Running session metadata (name, color, profile reference) is stored as tmux user options on the session itself (see Section 4.6). When a session dies, its runtime metadata dies with it — the profile retains the original values.
@@ -175,11 +169,12 @@ This means tmux is the single source of truth for **all** running session state 
 
 ```json
 {
-  "emulator": "ghostty",
-  "emulator_path": null,
-  "tmux_path": null
+  "tmux_path": null,
+  "shell": "/usr/local/bin/fish"
 }
 ```
+
+`tmux_path` overrides tmux discovery from `$PATH`. `shell` overrides `$SHELL` for new tmux panes.
 
 ### 3.5 State Reconciliation
 
@@ -248,7 +243,7 @@ tmux control mode defines the following notifications. The library consumes the 
 | `%sessions-changed` | (none) | Re-query session list, emit updates |
 | `%session-changed <session-id> <name>` | Session ID, name | Update active session tracking |
 | `%session-renamed <name>` | New name | Update session metadata |
-| `%client-detached <client>` | Client name | Track emulator disconnect |
+| `%client-detached <client>` | Client name | Track client disconnect |
 
 **Subscriptions (for CWD tracking — see Section 9.2):**
 
@@ -260,7 +255,7 @@ tmux control mode defines the following notifications. The library consumes the 
 
 | Notification | Why Suppressed |
 |-------------|---------------|
-| `%output <pane-id> <value>` | Terminal output — user sees this in the emulator directly |
+| `%output <pane-id> <value>` | Terminal output — user sees this directly in their terminal |
 | `%extended-output` | Same, extended form |
 
 **Ignored (not relevant to session management):**
@@ -289,69 +284,20 @@ tmux control mode defines the following notifications. The library consumes the 
 3. For tabs with startup commands: `tmux send-keys -t muster_<slug>:<index> '<command>' Enter`
 4. Set user options: `@muster_name`, `@muster_color`, `@muster_profile` (see Section 3.3)
 5. Apply color theme (Section 6)
-6. Open control mode connection
-7. Launch emulator attached to the session
+6. Open control mode connection (if long-running consumer, e.g. GUI)
 
 **Attaching to an existing session:**
 1. Verify session exists via `tmux has-session -t <name>`
-2. Launch emulator with `tmux attach -t <name>`
+2. `tmux attach -t <name>` (CLI execs this, replacing the current process)
 3. Optionally switch to a specific window: `tmux select-window -t <name>:<index>`
 
 **Destroying a group:**
 1. `tmux kill-session -t <name>` (user options are destroyed with the session)
-2. Drop control mode connection
-3. Emulator window closes automatically (tmux session gone)
+2. Drop control mode connection (if any)
 
 ---
 
-## 5. Terminal Emulator Interface
-
-### 5.1 Abstraction Layer
-
-The library defines an `Emulator` trait for launching and managing terminal emulator windows:
-
-```rust
-pub trait Emulator: Send + Sync {
-    /// Launch the emulator attached to a tmux session.
-    /// Returns a handle or identifier for the spawned process.
-    fn launch(&self, session_name: &str) -> Result<EmulatorHandle, Error>;
-
-    /// Check if an emulator window is already open for this session.
-    fn is_running(&self, session_name: &str) -> Result<bool, Error>;
-
-    /// Focus an existing emulator window for this session (if supported).
-    fn focus(&self, session_name: &str) -> Result<(), Error>;
-
-    /// Return the command and args needed to attach to a session.
-    fn attach_command(&self, session_name: &str) -> Vec<String>;
-}
-```
-
-### 5.2 Ghostty Implementation
-
-**Launching a new window:**
-```bash
-open -na Ghostty.app --args -e tmux attach -t <session_name>
-```
-
-**Process detection:**
-Check if a Ghostty process is running with the session name in its command line arguments (via `ps` inspection). This is a pragmatic approach given Ghostty's lack of a control API on macOS.
-
-**Limitations (macOS, current Ghostty):**
-- Cannot programmatically add tabs to an existing Ghostty window
-- Cannot programmatically focus a specific Ghostty window
-- Each `open -na` invocation creates a new window (separate Ghostty instance)
-
-**User workflow for single-window operation:**
-The user manually creates Ghostty tabs (Cmd+T) and uses the CLI to launch/attach sessions within each tab. The app cannot automate the single-window layout, but the two-level navigation (Cmd+Shift+Bracket for Ghostty tabs, Cmd+Bracket for tmux windows) works naturally.
-
-### 5.3 Future Emulator Support
-
-The `Emulator` trait allows adding support for other terminals (Alacritty, WezTerm, Kitty, etc.) without changing the core library. Each implementation provides its own launch command and process detection logic. The user selects their preferred emulator in `settings.json`.
-
----
-
-## 6. Theme and Color Control
+## 5. Theme and Color Control
 
 ### 6.1 Color Application
 
@@ -404,8 +350,8 @@ The library generates a minimal tmux configuration for managed sessions:
 # Mouse support (clickable tabs)
 set -g mouse on
 
-# Cmd+[ / Cmd+] mapped at the Ghostty level (see 7.2)
-# These arrive as prefix + p / prefix + n
+# Terminal emulator keybindings can map Cmd+[ / Cmd+] to these
+# They arrive as prefix + p / prefix + n
 
 # Direct window selection via Option+number
 bind-key -n M-1 select-window -t :0
@@ -421,24 +367,7 @@ bind-key -n M-9 select-window -t :8
 
 This configuration is applied per-session or via a shared config file sourced by managed sessions.
 
-### 7.2 Ghostty Key Bindings
-
-The library can write or recommend Ghostty keybinding configuration:
-
-```ghostty
-# tmux tab navigation (Cmd+bracket for prev/next tmux window)
-keybind = super+left_bracket=text:\x02p
-keybind = super+right_bracket=text:\x02n
-```
-
-These coexist with Ghostty's native keybindings:
-- **Cmd+[** / **Cmd+]** — switch tmux windows (tabs within a group)
-- **Cmd+Shift+[** / **Cmd+Shift+]** — switch Ghostty tabs (groups)
-- **Cmd+T** — new Ghostty tab
-- **Cmd+1-9** — Ghostty tab by number (or remapped to tmux windows)
-- **Mouse click** — click tmux tab in status bar to switch
-
-### 7.3 Key Binding Philosophy
+### 7.2 Key Binding Philosophy
 
 The library does not forcibly override user configuration. It provides:
 1. A recommended configuration that the user can adopt
@@ -451,11 +380,11 @@ The library does not forcibly override user configuration. It provides:
 
 ### 8.1 Terminology Mapping
 
-| App Concept | tmux Concept | Ghostty Concept |
-|-------------|-------------|-----------------|
-| Terminal Group | Session | Window (one per group) |
-| Tab | Window | N/A (managed by tmux) |
-| Terminal | Pane | N/A (managed by tmux) |
+| App Concept | tmux Concept |
+|-------------|-------------|
+| Terminal Group | Session |
+| Tab | Window |
+| Terminal | Pane |
 
 ### 8.2 Operations
 
@@ -463,16 +392,16 @@ The library does not forcibly override user configuration. It provides:
 Query tmux for `muster_*` sessions with their `@muster_*` user options. Merge with profiles from `profiles.json` where a profile reference exists.
 
 **Open group:**
-If session exists → launch emulator attached to it. If session doesn't exist but profile exists → create session from profile, then launch emulator. Optionally switch to a specific tab by index.
+If session exists → attach to it. If session doesn't exist but profile exists → create session from profile, then attach. Optionally switch to a specific tab by index.
 
 **Close group:**
-Kill the tmux session. The emulator window closes automatically. Metadata dies with the session — no file cleanup needed.
+Kill the tmux session. Metadata dies with the session — no file cleanup needed.
 
 **Add tab to group:**
 `tmux new-window -t <session> -n <name> -c <cwd>`. Control mode pushes `%window-add`. GUI updates reactively.
 
 **Close tab:**
-`tmux kill-window -t <session>:<index>`. Control mode pushes `%window-close`. GUI updates reactively. If last window, session dies, emulator closes.
+`tmux kill-window -t <session>:<index>`. Control mode pushes `%window-close`. GUI updates reactively. If last window, session dies.
 
 **Switch tab:**
 `tmux select-window -t <session>:<index>`. Used when the user clicks a beacon or selects a tab in the GUI.
@@ -542,8 +471,8 @@ The Tauri application layer:
 
 ### 9.4 What Is NOT Synchronized
 
-- Terminal output (user sees it directly in the emulator)
-- Scrollback buffer (owned by tmux, viewed in emulator)
+- Terminal output (user sees it directly in their terminal)
+- Scrollback buffer (owned by tmux, viewed in the terminal)
 - Pane splits within a window (possible future feature, not in scope)
 
 ---
@@ -556,7 +485,6 @@ The Tauri application layer:
 pub struct Muster {
     config_dir: PathBuf,
     tmux: TmuxClient,
-    emulator: Box<dyn Emulator>,
 }
 
 impl Muster {
@@ -587,9 +515,6 @@ impl Muster {
     // --- State observation ---
     pub async fn get_session_state(&self, session: &str) -> Result<SessionState, Error>;
     pub fn subscribe(&self) -> broadcast::Receiver<MusterEvent>;
-
-    // --- Emulator ---
-    pub async fn open_emulator(&self, session: &str) -> Result<(), Error>;
 }
 ```
 
@@ -641,14 +566,12 @@ The library is testable at multiple levels:
 - Session name convention (encoding/decoding profile IDs)
 - Control mode stream parser (given raw control mode output, verify parsed events)
 
-**Integration tests (tmux required, no emulator):**
+**Integration tests (tmux required):**
 - Session lifecycle: create from profile, verify windows exist, destroy
 - Tab operations: add, close, rename, verify via tmux queries
 - Theme application: set color, verify tmux options
 - Control mode: connect, receive events on window add/close
 - Startup discovery: create sessions externally with `@muster_*` options, verify library discovers them
-
-**Integration tests mock the `Emulator` trait** — they test the library's tmux interaction without launching any GUI windows.
 
 ---
 
@@ -679,8 +602,7 @@ muster profile delete <name-or-id>
 ### 11.2 Behavior
 
 - `launch` is the primary command. If the session is already running, it attaches. If not, it creates from the profile.
-- When run inside a Ghostty tab, `launch` and `attach` replace the current shell with `exec tmux attach -t <session>`.
-- When run outside a terminal context (e.g., from the GUI), it launches the emulator.
+- `launch` and `attach` replace the current process with `exec tmux attach -t <session>`. Use `--detach` to create without attaching.
 - `list` shows profiles with a marker for which ones have active sessions.
 
 ### 11.3 Output Format
@@ -776,7 +698,6 @@ This design eliminates all of these:
 **General:**
 - **tmux not installed**: library returns clear error at init. App can show setup instructions.
 - **tmux server not running**: `new-session` starts it automatically. No special handling needed.
-- **Emulator not installed**: library returns error on `open_emulator`. Sessions still manageable via CLI.
 - **Config directory permissions**: standard filesystem error handling.
 - **Session killed externally**: control mode reports `%sessions-changed`. Library re-queries tmux. GUI updates. No file cleanup needed — metadata dies with the session.
 
@@ -794,7 +715,6 @@ Each control mode connection is a persistent child process with stdin/stdout pip
 
 ### 13.3 Extensibility
 
-- **New emulators**: implement the `Emulator` trait. Core logic unchanged.
 - **Remote sessions**: tmux natively supports remote attach. The library could extend to SSH tunneled sessions.
 - **Session sharing**: tmux supports multiple clients on one session. Could enable collaborative terminal viewing.
 
@@ -821,7 +741,7 @@ This library fills a genuine gap. The Rust tmux bindings (command execution + co
 
 ### 13.5 What This Design Does NOT Do
 
-- **Render terminal output**: the emulator does this. The app is not a terminal emulator.
+- **Render terminal output**: the terminal does this. The library is not a terminal emulator.
 - **Replace tmux**: the app is an organizational layer on top of tmux, not a reimplementation.
 - **Manage non-terminal processes**: this is specifically for interactive terminal sessions, not for process supervision.
 - **Session dependencies / orchestration**: starting group A before group B is process orchestration, not terminal management.
@@ -847,8 +767,7 @@ The minimum viable library. Everything needed for session group lifecycle manage
 - Session metadata via tmux user options (`@muster_name`, `@muster_color`, `@muster_profile`)
 - State reconciliation on startup
 - Event subscription (`broadcast::Receiver<MusterEvent>`)
-- Emulator trait + Ghostty implementation
-- CLI binary with core commands (list, launch, attach, kill, new, color, status)
+- CLI binary with core commands (list, launch, attach, kill, new, color, status, profile management)
 
 ### 14.2 Post-Core Features
 

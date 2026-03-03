@@ -5,32 +5,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Settings {
-    #[serde(default = "default_emulator")]
-    pub emulator: String,
-    #[serde(default)]
-    pub emulator_path: Option<String>,
     #[serde(default)]
     pub tmux_path: Option<String>,
     /// Shell to use for new tmux panes. Defaults to `$SHELL`.
     #[serde(default)]
     pub shell: Option<String>,
-}
-
-fn default_emulator() -> String {
-    "ghostty".to_string()
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            emulator: default_emulator(),
-            emulator_path: None,
-            tmux_path: None,
-            shell: None,
-        }
-    }
 }
 
 /// Manages settings.json in the config directory.
@@ -81,9 +62,8 @@ mod tests {
         let store = SettingsStore::new(dir.path()).unwrap();
 
         let settings = store.load().unwrap();
-        assert_eq!(settings.emulator, "ghostty");
-        assert!(settings.emulator_path.is_none());
         assert!(settings.tmux_path.is_none());
+        assert!(settings.shell.is_none());
     }
 
     #[test]
@@ -92,10 +72,8 @@ mod tests {
         let store = SettingsStore::new(dir.path()).unwrap();
 
         let settings = Settings {
-            emulator: "alacritty".to_string(),
-            emulator_path: Some("/usr/local/bin/alacritty".to_string()),
             tmux_path: Some("/opt/homebrew/bin/tmux".to_string()),
-            shell: None,
+            shell: Some("/usr/local/bin/fish".to_string()),
         };
 
         store.save(&settings).unwrap();
@@ -114,10 +92,9 @@ mod tests {
     #[test]
     fn test_settings_partial_json() {
         // Settings should use defaults for missing fields
-        let json = r#"{"emulator": "kitty"}"#;
+        let json = r#"{"tmux_path": "/usr/bin/tmux"}"#;
         let settings: Settings = serde_json::from_str(json).unwrap();
-        assert_eq!(settings.emulator, "kitty");
-        assert!(settings.emulator_path.is_none());
-        assert!(settings.tmux_path.is_none());
+        assert_eq!(settings.tmux_path.as_deref(), Some("/usr/bin/tmux"));
+        assert!(settings.shell.is_none());
     }
 }

@@ -4,7 +4,6 @@ use tokio::sync::broadcast;
 
 use crate::config::profile::{Profile, ProfileStore, TabProfile};
 use crate::config::settings::{Settings, SettingsStore};
-use crate::emulator::{Emulator, GhosttyEmulator};
 use crate::error::{Error, Result};
 use crate::session;
 use crate::tmux::client::TmuxClient;
@@ -18,7 +17,6 @@ pub struct Muster {
     client: TmuxClient,
     profiles: ProfileStore,
     settings: SettingsStore,
-    emulator: Box<dyn Emulator>,
     config_dir: PathBuf,
     tx: broadcast::Sender<MusterEvent>,
 }
@@ -39,16 +37,12 @@ impl Muster {
 
         let profiles = ProfileStore::new(config_dir)?;
 
-        // TODO: match on settings.emulator when more emulators are supported
-        let emulator: Box<dyn Emulator> = Box::new(GhosttyEmulator::new());
-
         let (tx, _) = broadcast::channel(64);
 
         Ok(Self {
             client,
             profiles,
             settings: settings_store,
-            emulator,
             config_dir: config_dir.to_path_buf(),
             tx,
         })
@@ -66,14 +60,12 @@ impl Muster {
         };
 
         let profiles = ProfileStore::new(config_dir)?;
-        let emulator: Box<dyn Emulator> = Box::new(GhosttyEmulator::new());
         let (tx, _) = broadcast::channel(64);
 
         Ok(Self {
             client,
             profiles,
             settings: settings_store,
-            emulator,
             config_dir: config_dir.to_path_buf(),
             tx,
         })
@@ -395,13 +387,6 @@ impl Muster {
             }
         }
 
-        Ok(())
-    }
-
-    // --- Emulator ---
-
-    pub fn open_emulator(&self, session: &str) -> Result<()> {
-        self.emulator.launch(session)?;
         Ok(())
     }
 
