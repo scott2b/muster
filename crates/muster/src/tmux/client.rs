@@ -61,7 +61,12 @@ impl TmuxClient {
         cwd: &str,
         shell: Option<&str>,
     ) -> Result<()> {
+        let shell_env = shell.map(|sh| format!("SHELL={sh}"));
         let mut args = vec!["new-session", "-d", "-s", name, "-n", first_window_name, "-c", cwd];
+        if let Some(ref env_val) = shell_env {
+            args.push("-e");
+            args.push(env_val);
+        }
         if let Some(sh) = shell {
             args.push(sh);
         }
