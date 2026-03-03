@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process;
@@ -123,6 +124,18 @@ enum ProfileAction {
     },
 }
 
+/// Render a colored dot using ANSI truecolor. Falls back to plain dot if not a TTY.
+fn color_dot(hex: &str) -> String {
+    if !std::io::stdout().is_terminal() {
+        return "●".to_string();
+    }
+    if let Ok((r, g, b)) = muster::session::theme::hex_to_rgb(hex) {
+        format!("\x1b[38;2;{r};{g};{b}m●\x1b[0m")
+    } else {
+        "●".to_string()
+    }
+}
+
 fn default_config_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("~/.config"))
@@ -170,14 +183,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                             .iter()
                             .any(|s| s.profile_id.as_deref() == Some(&p.id));
                         let marker = if active { " [active]" } else { "" };
-                        println!("  {} ({}){}", p.name, p.id, marker);
+                        println!("  {} {} ({}){}", color_dot(&p.color), p.name, p.id, marker);
                     }
                 }
                 if !sessions.is_empty() {
                     println!("\nSessions:");
                     for s in &sessions {
                         println!(
-                            "  {} — {} ({} windows){}",
+                            "  {} {} — {} ({} windows){}",
+                            color_dot(&s.color),
                             s.session_name,
                             s.display_name,
                             s.window_count,
@@ -286,8 +300,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 for s in &sessions {
                     println!(
-                        "{} — {} [{} windows] {}",
-                        s.session_name, s.display_name, s.window_count, s.color
+                        "{} {} — {} [{} windows]",
+                        color_dot(&s.color),
+                        s.session_name,
+                        s.display_name,
+                        s.window_count,
                     );
                     if let Ok(windows) = m.client().list_windows(&s.session_name) {
                         for w in &windows {
@@ -331,11 +348,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     for p in &profiles {
                         println!(
-                            "  {} ({}) — {} tab(s), color: {}",
+                            "  {} {} ({}) — {} tab(s)",
+                            color_dot(&p.color),
                             p.name,
                             p.id,
                             p.tabs.len(),
-                            p.color
                         );
                     }
                 }
