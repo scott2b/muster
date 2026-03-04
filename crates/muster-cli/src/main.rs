@@ -138,9 +138,11 @@ enum Command {
         action: ProfileAction,
     },
 
-    /// Install macOS notification app bundle
-    #[command(name = "setup-notifications")]
-    SetupNotifications,
+    /// Notification management
+    Notifications {
+        #[command(subcommand)]
+        action: NotificationAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -212,6 +214,14 @@ enum ProfileAction {
         /// Tab name or 0-based index
         tab: String,
     },
+}
+
+#[derive(Subcommand)]
+enum NotificationAction {
+    /// Install macOS notification app bundle
+    Setup,
+    /// Remove macOS notification app bundle
+    Remove,
 }
 
 /// Parse a `name:cwd[:command]` string into a `TabProfile`.
@@ -390,19 +400,38 @@ fn exec_tmux_attach(session: &str) -> ! {
     process::exit(1);
 }
 
-/// Send a notification, preferring macOS desktop notifications when available.
+/// Send a notification, preferring native macOS desktop notifications when available.
 ///
-/// On macOS (outside SSH), tries the Muster.app notification helper first —
-/// this has a CFBundleIdentifier so macOS Notification Center works properly.
+/// On macOS (outside SSH), launches `MusterNotify.app` via `open` — this provides
+/// native UNUserNotificationCenter banners with click-to-source navigation.
 /// Falls back to tmux display-message if the helper isn't installed or fails.
-fn send_notification(summary: &str, body: &str) {
+fn send_notification(
+    summary: &str,
+    body: &str,
+    session: &str,
+    window: &str,
+    terminal: &str,
+) {
     if cfg!(target_os = "macos") && std::env::var_os("SSH_CONNECTION").is_none() {
-        let app_binary = dirs::config_dir()
+        let app_dir = dirs::config_dir()
             .unwrap_or_default()
-            .join("muster/Muster.app/Contents/MacOS/muster-notify");
-        if app_binary.exists() {
-            let status = std::process::Command::new(&app_binary)
-                .args([summary, body])
+            .join("muster/MusterNotify.app");
+        if app_dir.exists() {
+            let status = std::process::Command::new("open")
+                .args([
+                    app_dir.to_str().unwrap_or_default(),
+                    "--args",
+                    summary,
+                    body,
+                    "--session",
+                    session,
+                    "--window",
+                    window,
+                    "--terminal",
+                    terminal,
+                    "--timeout",
+                    "30",
+                ])
                 .status();
             if status.is_ok_and(|s| s.success()) {
                 return;
@@ -421,15 +450,17 @@ fn send_notification(summary: &str, body: &str) {
         .status();
 }
 
-/// Install the Muster.app notification helper bundle into ~/.config/muster/.
+/// Install the MusterNotify.app notification helper bundle into ~/.config/muster/.
 ///
 /// macOS requires a CFBundleIdentifier for persistent Notification Center access.
-/// This creates a minimal .app bundle containing the `muster-notify` binary.
+/// This creates a minimal .app bundle containing the `muster-notify` binary,
+/// codesigns it, and prints instructions for first-run permission grant.
 fn setup_notifications() -> Result<(), Box<dyn std::error::Error>> {
     let config_dir = dirs::config_dir()
         .ok_or("Could not determine config directory")?
         .join("muster");
-    let app_dir = config_dir.join("Muster.app/Contents");
+    let bundle_dir = config_dir.join("MusterNotify.app");
+    let app_dir = bundle_dir.join("Contents");
     let macos_dir = app_dir.join("MacOS");
     std::fs::create_dir_all(&macos_dir)?;
 
@@ -439,9 +470,11 @@ fn setup_notifications() -> Result<(), Box<dyn std::error::Error>> {
 <plist version="1.0">
 <dict>
   <key>CFBundleIdentifier</key>
-  <string>com.muster.notify</string>
+  <string>com.muster.notifier</string>
   <key>CFBundleName</key>
-  <string>Muster</string>
+  <string>MusterNotify</string>
+  <key>CFBundleDisplayName</key>
+  <string>Muster Notifications</string>
   <key>CFBundleExecutable</key>
   <string>muster-notify</string>
   <key>CFBundlePackageType</key>
@@ -482,8 +515,53 @@ fn setup_notifications() -> Result<(), Box<dyn std::error::Error>> {
         std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755))?;
     }
 
-    println!("Notification app installed: {}", config_dir.join("Muster.app").display());
-    println!("macOS may prompt you to allow notifications from Muster.");
+    // Codesign the bundle (ad-hoc signature, required for notification permissions)
+    let codesign_status = std::process::Command::new("codesign")
+        .args([
+            "--force",
+            "--sign",
+            "-",
+            "--identifier",
+            "com.muster.notifier",
+            bundle_dir.to_str().unwrap_or_default(),
+        ])
+        .status();
+    match codesign_status {
+        Ok(s) if s.success() => println!("Bundle codesigned successfully."),
+        Ok(s) => eprintln!("Warning: codesign exited with {s}"),
+        Err(e) => eprintln!("Warning: codesign failed: {e}"),
+    }
+
+    println!("Notification app installed: {}", bundle_dir.display());
+    println!();
+    println!("To grant notification permission, run once:");
+    println!("  open \"{}\"", bundle_dir.display());
+    println!("macOS will prompt you to allow notifications from Muster Notifications.");
+
+    Ok(())
+}
+
+/// Remove the MusterNotify.app bundle and clean up delivered notifications.
+fn uninstall_notifications() -> Result<(), Box<dyn std::error::Error>> {
+    let bundle_dir = dirs::config_dir()
+        .ok_or("Could not determine config directory")?
+        .join("muster/MusterNotify.app");
+
+    if bundle_dir.exists() {
+        std::fs::remove_dir_all(&bundle_dir)?;
+        println!("Removed {}", bundle_dir.display());
+    } else {
+        println!("Nothing to remove (bundle not found).");
+    }
+
+    // Also remove the old Muster.app bundle if it exists
+    let old_bundle = dirs::config_dir()
+        .unwrap_or_default()
+        .join("muster/Muster.app");
+    if old_bundle.exists() {
+        std::fs::remove_dir_all(&old_bundle)?;
+        println!("Removed old {}", old_bundle.display());
+    }
 
     Ok(())
 }
@@ -1083,8 +1161,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 format!("Exit code: {exit_code}\n{last_lines}")
             };
 
+            let terminal = m
+                .settings()
+                .ok()
+                .and_then(|s| s.terminal)
+                .unwrap_or_else(|| "ghostty".to_string());
             let summary = format!("Exited: {display_name} \u{25b8} {window_name}");
-            send_notification(&summary, &body);
+            send_notification(&summary, &body, &session_name, &window_name, &terminal);
 
             // Clean up the dead pane
             let _ = m.client().cmd(&["kill-pane", "-t", &pane_id]);
@@ -1099,9 +1182,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .get_option(&session_name, "@muster_name")?
                 .unwrap_or_else(|| session_name.clone());
 
+            let terminal = m
+                .settings()
+                .ok()
+                .and_then(|s| s.terminal)
+                .unwrap_or_else(|| "ghostty".to_string());
             let summary = format!("Bell: {display_name} \u{25b8} {window_name}");
 
-            send_notification(&summary, "");
+            send_notification(&summary, "", &session_name, &window_name, &terminal);
         }
 
         Command::Status => {
@@ -1244,8 +1332,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             m.sync_rename(&session, window, &name)?;
         }
 
-        Command::SetupNotifications => {
-            setup_notifications()?;
+        Command::Notifications { action } => match action {
+            NotificationAction::Setup => setup_notifications()?,
+            NotificationAction::Remove => uninstall_notifications()?,
         }
 
         Command::Profile { action } => match action {

@@ -12,6 +12,10 @@ pub struct Settings {
     /// Shell to use for new tmux panes. Defaults to `$SHELL`.
     #[serde(default)]
     pub shell: Option<String>,
+    /// Terminal emulator for notification click-to-source.
+    /// Values: "ghostty", "alacritty", "terminal". Default: "ghostty".
+    #[serde(default)]
+    pub terminal: Option<String>,
 }
 
 /// Manages settings.json in the config directory.
@@ -74,6 +78,7 @@ mod tests {
         let settings = Settings {
             tmux_path: Some("/opt/homebrew/bin/tmux".to_string()),
             shell: Some("/usr/local/bin/fish".to_string()),
+            terminal: Some("ghostty".to_string()),
         };
 
         store.save(&settings).unwrap();

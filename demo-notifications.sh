@@ -2,7 +2,10 @@
 #
 # Demo: muster session notifications via tmux hooks
 #
-# Notifications are delivered via tmux display-message (visible in tmux).
+# On macOS with `muster notifications setup`, notifications appear as native
+# desktop banners with click-to-source (opens a new terminal attached to the
+# session). Falls back to tmux display-message over SSH or when not installed.
+#
 # This script creates a session, attaches to it, then triggers notifications
 # from a background subshell so you can see the messages appear.
 
@@ -50,9 +53,8 @@ read -r
     tmux select-window -t "${SESSION}:1" 2>/dev/null || true
     tmux send-keys -t "${SESSION}:0" "printf '\\a'" Enter
 
-    sleep 5
-    # Clean exit
-    tmux kill-session -t "$SESSION" 2>/dev/null || true
+    # Session stays alive — exit manually with `muster kill demo-notify`
+    # or detach with Ctrl-b d
 ) &
 
 exec muster attach "$PROFILE_ID"
