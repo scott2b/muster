@@ -4,40 +4,144 @@
 use crate::error::{Error, Result};
 use crate::tmux::client::TmuxClient;
 
-/// Resolve a named color to its hex value. Returns None if not a known name.
-fn named_color_to_hex(name: &str) -> Option<&'static str> {
-    match name.to_lowercase().as_str() {
-        "black" => Some("#000000"),
-        "red" => Some("#cc0000"),
-        "green" => Some("#4e9a06"),
-        "yellow" => Some("#c4a000"),
-        "blue" => Some("#3465a4"),
-        "magenta" => Some("#75507b"),
-        "cyan" => Some("#06989a"),
-        "white" => Some("#d3d7cf"),
-        "orange" => Some("#f97316"),
-        "pink" => Some("#ec4899"),
-        "purple" | "violet" => Some("#8b5cf6"),
-        "teal" => Some("#14b8a6"),
-        "lime" => Some("#84cc16"),
-        "amber" => Some("#f59e0b"),
-        "rose" => Some("#f43f5e"),
-        "indigo" => Some("#6366f1"),
-        "sky" => Some("#0ea5e9"),
-        "emerald" => Some("#10b981"),
-        "fuchsia" => Some("#d946ef"),
-        "slate" => Some("#64748b"),
-        "zinc" => Some("#71717a"),
-        "stone" => Some("#78716c"),
-        "gray" | "grey" => Some("#808080"),
+/// The set of named colors available for session theming.
+///
+/// Each entry is `(canonical_name, aliases, hex)`. The canonical name is the
+/// primary name shown in listings; aliases are accepted as synonyms.
+pub const NAMED_COLORS: &[(&str, &[&str], &str)] = &[
+    ("black", &[], "#000000"),
+    ("red", &[], "#cc0000"),
+    ("green", &[], "#4e9a06"),
+    ("yellow", &[], "#c4a000"),
+    ("blue", &[], "#3465a4"),
+    ("magenta", &[], "#75507b"),
+    ("cyan", &[], "#06989a"),
+    ("white", &[], "#d3d7cf"),
+    ("orange", &[], "#f97316"),
+    ("pink", &[], "#ec4899"),
+    ("purple", &["violet"], "#a855f7"),
+    ("teal", &[], "#14b8a6"),
+    ("lime", &[], "#84cc16"),
+    ("amber", &[], "#f59e0b"),
+    ("rose", &[], "#f43f5e"),
+    ("indigo", &[], "#6366f1"),
+    ("sky", &[], "#0ea5e9"),
+    ("emerald", &[], "#10b981"),
+    ("fuchsia", &[], "#d946ef"),
+    ("coral", &[], "#ff7f50"),
+    ("tomato", &[], "#ff6347"),
+    ("crimson", &[], "#dc143c"),
+    ("gold", &[], "#ffd700"),
+    ("navy", &[], "#000080"),
+    ("brown", &["chocolate"], "#8b4513"),
+    ("slate", &[], "#64748b"),
+    ("gray", &["grey"], "#808080"),
+];
+
+/// Tailwind CSS shade variants: light (300), base (500), dark (700).
+///
+/// Each entry is `(family_name, light_hex, base_hex, dark_hex)`.
+/// Bare color names in `NAMED_COLORS` may differ from the base here
+/// (e.g. bare `red` is the classic terminal value, not Tailwind red-500).
+pub const TAILWIND_SHADES: &[(&str, &str, &str, &str)] = &[
+    ("slate",   "#cbd5e1", "#64748b", "#334155"),
+    ("gray",    "#d1d5db", "#6b7280", "#374151"),
+    ("red",     "#fca5a5", "#ef4444", "#b91c1c"),
+    ("orange",  "#fdba74", "#f97316", "#c2410c"),
+    ("amber",   "#fcd34d", "#f59e0b", "#b45309"),
+    ("yellow",  "#fde047", "#eab308", "#a16207"),
+    ("lime",    "#bef264", "#84cc16", "#4d7c0f"),
+    ("green",   "#86efac", "#22c55e", "#15803d"),
+    ("emerald", "#6ee7b7", "#10b981", "#047857"),
+    ("teal",    "#5eead4", "#14b8a6", "#0f766e"),
+    ("cyan",    "#67e8f9", "#06b6d4", "#0e7490"),
+    ("sky",     "#7dd3fc", "#0ea5e9", "#0369a1"),
+    ("blue",    "#93c5fd", "#3b82f6", "#1d4ed8"),
+    ("indigo",  "#a5b4fc", "#6366f1", "#4338ca"),
+    ("violet",  "#c4b5fd", "#8b5cf6", "#6d28d9"),
+    ("purple",  "#d8b4fe", "#a855f7", "#7e22ce"),
+    ("fuchsia", "#f0abfc", "#d946ef", "#a21caf"),
+    ("pink",    "#f9a8d4", "#ec4899", "#be185d"),
+    ("rose",    "#fda4af", "#f43f5e", "#be123c"),
+];
+
+/// Compute a lighter variant by mixing 50% toward white.
+fn computed_light(hex: &str) -> Option<String> {
+    let (r, g, b) = hex_to_rgb(hex).ok()?;
+    let lr = (u16::from(r) + 255) / 2;
+    let lg = (u16::from(g) + 255) / 2;
+    let lb = (u16::from(b) + 255) / 2;
+    Some(rgb_to_hex(lr as u8, lg as u8, lb as u8))
+}
+
+/// Compute a darker variant by scaling channels to 45%.
+fn computed_dark(hex: &str) -> Option<String> {
+    let (r, g, b) = hex_to_rgb(hex).ok()?;
+    let dr = (u16::from(r) * 45 / 100) as u8;
+    let dg = (u16::from(g) * 45 / 100) as u8;
+    let db = (u16::from(b) * 45 / 100) as u8;
+    Some(rgb_to_hex(dr, dg, db))
+}
+
+/// Resolve a shaded color name (e.g. `red-light`, `blue-dark`) to hex.
+///
+/// Checks `TAILWIND_SHADES` first for curated values, then falls back to
+/// computing light/dark from the base color in `NAMED_COLORS`.
+fn shaded_color_to_hex(input: &str) -> Option<String> {
+    let (name, suffix) = input.rsplit_once('-')?;
+    if suffix != "light" && suffix != "dark" {
+        return None;
+    }
+    let lower_name = name.to_lowercase();
+
+    // Prefer curated Tailwind shades
+    if let Some(scale) = TAILWIND_SHADES.iter().find(|(n, _, _, _)| *n == lower_name) {
+        return match suffix {
+            "light" => Some(scale.1.to_string()),
+            "dark" => Some(scale.3.to_string()),
+            _ => None,
+        };
+    }
+
+    // Fall back to computing from the named color's base hex
+    let base_hex = NAMED_COLORS.iter().find_map(|(canonical, aliases, hex)| {
+        if *canonical == lower_name || aliases.contains(&lower_name.as_str()) {
+            Some(*hex)
+        } else {
+            None
+        }
+    })?;
+    match suffix {
+        "light" => computed_light(base_hex),
+        "dark" => computed_dark(base_hex),
         _ => None,
     }
+}
+
+/// Resolve a named color to its hex value. Returns None if not a known name.
+///
+/// Tries exact/alias match in `NAMED_COLORS` first, then falls back to
+/// shade suffixes (`-light`, `-dark`).
+fn named_color_to_hex(name: &str) -> Option<String> {
+    let lower = name.to_lowercase();
+    // Try exact/alias match first
+    if let Some(hex) = NAMED_COLORS.iter().find_map(|(canonical, aliases, hex)| {
+        if *canonical == lower || aliases.contains(&lower.as_str()) {
+            Some(*hex)
+        } else {
+            None
+        }
+    }) {
+        return Some(hex.to_string());
+    }
+    // Try shaded name (e.g. red-light, blue-dark)
+    shaded_color_to_hex(&lower)
 }
 
 /// Resolve a color string to hex. Accepts `#RRGGBB`, `RRGGBB`, or a named color.
 pub fn resolve_color(color: &str) -> Result<String> {
     if let Some(hex) = named_color_to_hex(color) {
-        return Ok(hex.to_string());
+        return Ok(hex);
     }
     // Validate as hex
     hex_to_rgb(color)?;
@@ -477,6 +581,43 @@ mod tests {
     fn test_resolve_color_invalid() {
         assert!(resolve_color("notacolor").is_err());
         assert!(resolve_color("").is_err());
+    }
+
+    #[test]
+    fn test_resolve_color_shaded() {
+        // Light shades (Tailwind 300)
+        assert_eq!(resolve_color("red-light").unwrap(), "#fca5a5");
+        assert_eq!(resolve_color("Blue-Light").unwrap(), "#93c5fd");
+        // Dark shades (Tailwind 700)
+        assert_eq!(resolve_color("red-dark").unwrap(), "#b91c1c");
+        assert_eq!(resolve_color("Green-Dark").unwrap(), "#15803d");
+        // Bare name still returns NAMED_COLORS value, not Tailwind base
+        assert_eq!(resolve_color("red").unwrap(), "#cc0000");
+        // Violet alias resolves to purple's hex
+        assert_eq!(resolve_color("violet").unwrap(), "#a855f7");
+        // Violet shades still work via TAILWIND_SHADES
+        assert_eq!(resolve_color("violet-light").unwrap(), "#c4b5fd");
+        assert_eq!(resolve_color("violet-dark").unwrap(), "#6d28d9");
+        // New CSS named colors
+        assert_eq!(resolve_color("coral").unwrap(), "#ff7f50");
+        assert_eq!(resolve_color("navy").unwrap(), "#000080");
+        assert_eq!(resolve_color("crimson").unwrap(), "#dc143c");
+        assert_eq!(resolve_color("gold").unwrap(), "#ffd700");
+        assert_eq!(resolve_color("brown").unwrap(), "#8b4513");
+        assert_eq!(resolve_color("chocolate").unwrap(), "#8b4513");
+        assert_eq!(resolve_color("tomato").unwrap(), "#ff6347");
+        // Computed shades for colors not in TAILWIND_SHADES
+        assert!(resolve_color("brown-light").is_ok());
+        assert!(resolve_color("brown-dark").is_ok());
+        assert!(resolve_color("navy-light").is_ok());
+        assert!(resolve_color("coral-dark").is_ok());
+    }
+
+    #[test]
+    fn test_shaded_color_invalid_suffix() {
+        // Unknown suffix falls through to hex validation and fails
+        assert!(resolve_color("red-medium").is_err());
+        assert!(resolve_color("red-base").is_err());
     }
 
     #[test]

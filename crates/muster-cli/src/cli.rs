@@ -73,12 +73,15 @@ pub enum Command {
         detach: bool,
     },
 
-    /// Change session color live
+    /// Manage session colors
     Color {
         /// Profile name, ID, or session name
-        session: String,
-        /// Hex color (e.g. #f97316)
-        color: String,
+        session: Option<String>,
+        /// New color (hex or named)
+        color: Option<String>,
+        /// List available named colors
+        #[arg(long)]
+        list: bool,
     },
 
     /// Show processes running inside sessions
