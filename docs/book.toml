@@ -1,0 +1,12 @@
+[book]
+authors = ["Scott Bradley"]
+language = "en"
+src = "src"
+title = "Muster Documentation"
+description = "Terminal session group management built on tmux"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/scott2b/muster"
+edit-url-template = "https://github.com/scott2b/muster/edit/main/docs/{path}"
