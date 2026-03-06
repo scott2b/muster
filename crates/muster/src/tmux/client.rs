@@ -53,6 +53,7 @@ impl TmuxClient {
 
     /// Execute a tmux command, returning stdout on success.
     pub fn cmd(&self, args: &[&str]) -> Result<String> {
+        tracing::debug!(cmd = %args.join(" "), "tmux");
         let output = Command::new(&self.tmux_path)
             .args(args)
             .env_remove("CLAUDECODE")
@@ -67,6 +68,7 @@ impl TmuxClient {
             if stderr.contains("no server running") || stderr.contains("no current session") {
                 return Ok(String::new());
             }
+            tracing::warn!(cmd = %args.join(" "), error = %stderr, "tmux command failed");
             Err(Error::TmuxError(stderr.into_owned()))
         }
     }
@@ -80,6 +82,7 @@ impl TmuxClient {
         if commands.is_empty() {
             return Ok(());
         }
+        tracing::debug!(count = commands.len(), "tmux source-file batch");
 
         let mut tmp = tempfile::NamedTempFile::new()
             .map_err(|e| Error::TmuxError(format!("failed to create temp file: {e}")))?;

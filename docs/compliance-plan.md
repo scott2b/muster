@@ -46,31 +46,36 @@ warnings. `cargo nextest run` 76 passed, 26 skipped.
 
 ---
 
-## Phase 2: Structured Tracing
+## Phase 2: Structured Tracing [DONE]
 
-Add consistent structured tracing to the core library. Currently tracing is
-imported but barely used.
+Added structured tracing to core library operations.
 
-### 2a. Audit current tracing usage
-- Search for all `tracing::` calls and `eprintln!`/`println!` used for logging.
-- Identify locations where tracing should be added (error paths, key operations).
-- Do NOT add tracing to every function — only where it aids debugging.
+### 2a. Audit [DONE]
+- Core library had zero tracing calls. CLI `eprintln!` usage is all user-facing
+  error/validation messages — appropriate as-is, not converted.
+- No `println!` in core library (clean separation).
 
-### 2b. Add tracing to key operations
-- Session lifecycle: creation, attachment, kill.
-- Profile operations: load, save, delete.
-- Tmux command execution: log commands at debug level, errors at warn/error.
-- Use structured fields: `tracing::info!(profile = %name, "launching session")`.
+### 2b. Tracing added to key operations [DONE]
+- `Muster::init` — debug: config_dir, tmux path discovery
+- `Muster::launch` — info: profile name + session name; debug: session reuse
+- `Muster::destroy` — info: session name
+- `Muster::save_profile` — info: id + name
+- `Muster::update_profile` — debug: id
+- `Muster::rename_profile` — info: old_id + new_id
+- `Muster::delete_profile` — info: id
+- `TmuxClient::cmd` — debug: command args; warn: failed commands with stderr
+- `TmuxClient::source_file` — debug: batch command count
+- tracing-subscriber already initialized in CLI main() with env-filter
 
-### 2c. Review muster-notify logging
-- The custom `log()` function writing to `/tmp/muster-notify.log` may be necessary
-  due to the macOS notification context (no terminal attached). Evaluate whether
-  `tracing-subscriber` with a file appender would work instead. If not, leave
-  as-is and document why.
+### 2c. muster-notify review [DONE]
+- Left as-is. The custom `log()` function writes to stderr + `/tmp/muster-notify.log`.
+  This is necessary because muster-notify runs as a background macOS notification
+  helper with no terminal attached. tracing-subscriber's default stderr output
+  would be lost. A file appender could work but adds dependency complexity for
+  a single-file helper binary — not worth it.
 
-**Verify**: `cargo clippy --workspace` zero warnings. `cargo fmt --check` passes.
-Tests pass. Manual test: run a command with `RUST_LOG=debug` and confirm
-structured output appears.
+**Verified**: `cargo clippy --workspace` zero warnings. `cargo fmt --check` passes.
+76 tests passed, 26 skipped.
 
 ---
 

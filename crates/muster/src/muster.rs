@@ -39,13 +39,17 @@ impl Muster {
     ///
     /// Discovers tmux, loads config, and prepares for operation.
     pub fn init(config_dir: &Path) -> Result<Self> {
+        tracing::debug!(config_dir = %config_dir.display(), "initializing muster");
         let settings_store = SettingsStore::new(config_dir)?;
         let settings = settings_store.load()?;
 
         let client = if let Some(ref path) = settings.tmux_path {
+            tracing::debug!(tmux_path = %path, "using configured tmux path");
             TmuxClient::with_path(PathBuf::from(path))
         } else {
-            TmuxClient::new()?
+            let c = TmuxClient::new()?;
+            tracing::debug!(tmux_path = %c.tmux_path().display(), "discovered tmux");
+            c
         };
 
         let profiles = ProfileStore::new(config_dir)?;
@@ -98,21 +102,25 @@ impl Muster {
 
     /// Create a new profile.
     pub fn save_profile(&self, profile: Profile) -> Result<Profile> {
+        tracing::info!(id = %profile.id, name = %profile.name, "creating profile");
         self.profiles.create(profile)
     }
 
     /// Update an existing profile.
     pub fn update_profile(&self, profile: Profile) -> Result<Profile> {
+        tracing::debug!(id = %profile.id, "updating profile");
         self.profiles.update(profile)
     }
 
     /// Rename a profile (changes its ID).
     pub fn rename_profile(&self, old_id: &str, profile: Profile) -> Result<Profile> {
+        tracing::info!(old_id = %old_id, new_id = %profile.id, "renaming profile");
         self.profiles.rename(old_id, profile)
     }
 
     /// Delete a profile by ID.
     pub fn delete_profile(&self, id: &str) -> Result<()> {
+        tracing::info!(id = %id, "deleting profile");
         self.profiles.delete(id)
     }
 
@@ -134,6 +142,7 @@ impl Muster {
 
         // If session already exists, return its info
         if self.client.has_session(&session_name)? {
+            tracing::debug!(session = %session_name, "session already exists, reusing");
             let sessions = self.client.list_sessions_with_metadata()?;
             if let Some(info) = sessions
                 .into_iter()
@@ -142,6 +151,8 @@ impl Muster {
                 return Ok(info);
             }
         }
+
+        tracing::info!(profile = %profile.name, session = %session_name, "launching session");
 
         // Resolve shell from settings → $SHELL
         let settings = self.settings.load()?;
@@ -170,6 +181,7 @@ impl Muster {
 
     /// Destroy (kill) a tmux session.
     pub fn destroy(&self, session_name: &str) -> Result<()> {
+        tracing::info!(session = %session_name, "destroying session");
         session::destroy(&self.client, session_name)
     }
 
