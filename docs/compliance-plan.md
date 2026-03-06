@@ -79,15 +79,22 @@ Added structured tracing to core library operations.
 
 ---
 
-## Phase 3: Code Organization Polish
+## Phase 3: Code Organization Polish [DONE]
 
-### 3a. Review pub vs pub(crate) usage
-- Audit functions/types that are `pub` but only used within the crate.
-- Change to `pub(crate)` where appropriate.
-- This may surface unused public API — that's fine to clean up.
+### 3a. Review pub vs pub(crate) usage [DONE]
+- Audited all `pub` items in `muster` crate against actual cross-crate usage.
+- `session/theme.rs`: `rgb_to_hex`, `compute_dimmed`, `contrast_fg` made private;
+  `ThemeValues` and all fields/methods made `pub(crate)`; standalone theme functions
+  made `pub(crate)`. Removed dead `hook_command` method (superseded by
+  `neutral_hook_command`). `build_theme_commands` gated with `#[cfg(test)]`.
+- `session/mod.rs`: `resolve_shell`, `create_from_profile`, `destroy` made
+  `pub(crate)`. Removed dead `get_windows` function and unused `TmuxWindow` import.
+- `tmux/client.rs`: `quote_tmux`, `quote_tmux_cmd`, `SESSION_PREFIX` made
+  `pub(crate)`. Parse functions made private. `build_args` gated with `#[cfg(test)]`.
+- `tmux/control.rs`: `ControlLine`, `parse_control_line` made `pub(crate)`.
 
-**Verify**: `cargo check --workspace` passes (downstream crates still compile).
-`cargo nextest run` passes.
+**Verified**: `cargo clippy --workspace` zero warnings. `cargo fmt --check` passes.
+76 tests passed, 26 skipped.
 
 ---
 

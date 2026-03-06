@@ -47,7 +47,7 @@ pub enum MusterEvent {
 
 /// A parsed line from the control mode stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ControlLine {
+pub(crate) enum ControlLine {
     Notification(MusterEvent),
     BeginResponse {
         timestamp: String,
@@ -69,7 +69,7 @@ pub enum ControlLine {
 }
 
 /// Parse a single line from the control mode stream.
-pub fn parse_control_line(line: &str) -> ControlLine {
+pub(crate) fn parse_control_line(line: &str) -> ControlLine {
     if let Some(rest) = line.strip_prefix("%window-add ") {
         return ControlLine::Notification(MusterEvent::TabAdded {
             window_id: rest.trim().to_string(),

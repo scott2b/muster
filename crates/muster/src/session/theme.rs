@@ -171,17 +171,17 @@ pub fn hex_to_rgb(hex: &str) -> Result<(u8, u8, u8)> {
 }
 
 /// Convert RGB back to hex string.
-pub fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
+fn rgb_to_hex(r: u8, g: u8, b: u8) -> String {
     format!("#{r:02x}{g:02x}{b:02x}")
 }
 
 /// Compute a dimmed version of a color (divide each channel by 3).
-pub fn compute_dimmed(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
+fn compute_dimmed(r: u8, g: u8, b: u8) -> (u8, u8, u8) {
     (r / 3, g / 3, b / 3)
 }
 
 /// Compute relative luminance and return black or white for best contrast.
-pub fn contrast_fg(r: u8, g: u8, b: u8) -> &'static str {
+fn contrast_fg(r: u8, g: u8, b: u8) -> &'static str {
     // Relative luminance formula (simplified sRGB)
     let luminance = 0.299 * f64::from(r) + 0.587 * f64::from(g) + 0.114 * f64::from(b);
     if luminance > 128.0 {
@@ -192,15 +192,15 @@ pub fn contrast_fg(r: u8, g: u8, b: u8) -> &'static str {
 }
 
 /// Compute the theme values from a color and display name.
-pub struct ThemeValues {
-    pub color: String,
-    pub fg: String,
-    pub darker: String,
-    pub display_name: String,
+pub(crate) struct ThemeValues {
+    pub(crate) color: String,
+    pub(crate) fg: String,
+    pub(crate) darker: String,
+    pub(crate) display_name: String,
 }
 
 impl ThemeValues {
-    pub fn new(color: &str, display_name: &str) -> Result<Self> {
+    pub(crate) fn new(color: &str, display_name: &str) -> Result<Self> {
         let (r, g, b) = hex_to_rgb(color)?;
         let (dr, dg, db) = compute_dimmed(r, g, b);
         Ok(Self {
@@ -212,7 +212,7 @@ impl ThemeValues {
     }
 
     /// Session-level options (status bar, position, mouse).
-    pub fn session_commands(&self, session: &str) -> Vec<Vec<String>> {
+    pub(crate) fn session_commands(&self, session: &str) -> Vec<Vec<String>> {
         vec![
             vec![
                 "set-option".into(),
@@ -252,7 +252,7 @@ impl ThemeValues {
     const STALE_INDICATOR: &'static str = "#{?#{@muster_layout_stale},#[fg=#c4a000]\u{25cf} ,}";
 
     /// Window-level option key/value pairs for window-status styling.
-    pub fn window_options(&self) -> Vec<(String, String)> {
+    pub(crate) fn window_options(&self) -> Vec<(String, String)> {
         vec![
             (
                 "window-status-format".into(),
@@ -275,24 +275,9 @@ impl ThemeValues {
         ]
     }
 
-    /// Build the hook command string that applies window options to new windows.
-    pub fn hook_command(&self) -> String {
-        self.window_options()
-            .iter()
-            .map(|(k, v)| {
-                if v.is_empty() {
-                    format!("set-window-option {k} ''")
-                } else {
-                    format!("set-window-option {k} '{v}'")
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ; ")
-    }
-
     /// Window-level options for unpinned (neutral) windows.
     /// Includes a red beacon (●) to signal the window is ephemeral.
-    pub fn neutral_window_options() -> Vec<(String, String)> {
+    pub(crate) fn neutral_window_options() -> Vec<(String, String)> {
         vec![
             (
                 "window-status-format".into(),
@@ -307,7 +292,7 @@ impl ThemeValues {
     }
 
     /// Build hook command that applies neutral styling to new windows.
-    pub fn neutral_hook_command() -> String {
+    pub(crate) fn neutral_hook_command() -> String {
         Self::neutral_window_options()
             .iter()
             .map(|(k, v)| {
@@ -327,7 +312,7 @@ impl ThemeValues {
 /// During launch, all windows are pinned and the window count is known from
 /// the profile. This avoids the `list_windows` + `get_window_option` queries
 /// that `apply_theme` uses for live color changes.
-pub fn build_launch_theme_commands(
+pub(crate) fn build_launch_theme_commands(
     session: &str,
     color: &str,
     display_name: &str,
@@ -399,7 +384,8 @@ pub fn build_launch_theme_commands(
 }
 
 /// Build the list of tmux commands for theming a session (for testing).
-pub fn build_theme_commands(
+#[cfg(test)]
+fn build_theme_commands(
     session: &str,
     color: &str,
     display_name: &str,
@@ -414,7 +400,7 @@ pub fn build_theme_commands(
 }
 
 /// Apply colored (pinned) styling to a single window.
-pub fn apply_pinned_window_style(
+pub(crate) fn apply_pinned_window_style(
     client: &TmuxClient,
     session: &str,
     window_index: u32,
@@ -430,7 +416,7 @@ pub fn apply_pinned_window_style(
 }
 
 /// Apply neutral (unpinned) styling to a single window.
-pub fn apply_neutral_window_style(
+pub(crate) fn apply_neutral_window_style(
     client: &TmuxClient,
     session: &str,
     window_index: u32,
@@ -450,7 +436,7 @@ pub fn apply_neutral_window_style(
 /// Sets session-level options directly and applies window-level options
 /// to each existing window (colored for pinned, neutral for unpinned),
 /// plus installs a hook that gives new windows neutral styling.
-pub fn apply_theme(
+pub(crate) fn apply_theme(
     client: &TmuxClient,
     session: &str,
     color: &str,
@@ -524,7 +510,7 @@ pub fn apply_theme(
 
 /// Change a session's color: update the `@muster_color` option and re-apply theme.
 /// Accepts hex colors (`#f97316`) or named colors (`orange`).
-pub fn set_color(
+pub(crate) fn set_color(
     client: &TmuxClient,
     session: &str,
     color: &str,

@@ -5,7 +5,7 @@ pub mod theme;
 use crate::config::profile::{Profile, TabProfile};
 use crate::error::Result;
 use crate::tmux::client::{SESSION_PREFIX, TmuxClient, quote_tmux, quote_tmux_cmd};
-use crate::tmux::types::{SessionInfo, TmuxWindow};
+use crate::tmux::types::SessionInfo;
 
 /// Expand a leading `~` to the user's home directory.
 ///
@@ -27,7 +27,7 @@ fn expand_tilde(path: &str) -> String {
 /// Resolve the shell to use for new tmux panes.
 ///
 /// Priority: explicit shell setting → `$SHELL` env var → None (tmux default).
-pub fn resolve_shell(shell_setting: Option<&str>) -> Option<String> {
+pub(crate) fn resolve_shell(shell_setting: Option<&str>) -> Option<String> {
     if let Some(sh) = shell_setting
         && !sh.is_empty()
     {
@@ -224,7 +224,7 @@ fn build_launch_commands(
 /// Steps:
 /// 1. Create detached session with first tab (standalone — starts the server)
 /// 2. Batch everything else via `source-file` (one spawn for ~50 commands)
-pub fn create_from_profile(
+pub(crate) fn create_from_profile(
     client: &TmuxClient,
     profile: &Profile,
     shell: Option<&str>,
@@ -276,13 +276,8 @@ pub fn create_from_profile(
 }
 
 /// Destroy a tmux session.
-pub fn destroy(client: &TmuxClient, session_name: &str) -> Result<()> {
+pub(crate) fn destroy(client: &TmuxClient, session_name: &str) -> Result<()> {
     client.kill_session(session_name)
-}
-
-/// Get windows for a session.
-pub fn get_windows(client: &TmuxClient, session_name: &str) -> Result<Vec<TmuxWindow>> {
-    client.list_windows(session_name)
 }
 
 /// Build tmux command strings for session notification hooks.

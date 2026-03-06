@@ -11,7 +11,7 @@ use crate::tmux::types::{PaneContext, SessionInfo, TmuxPane, TmuxSession, TmuxWi
 ///
 /// Uses double quoting with `"` and `\` escaping. Suitable for option
 /// values, window names, paths, format strings, etc.
-pub fn quote_tmux(value: &str) -> String {
+pub(crate) fn quote_tmux(value: &str) -> String {
     let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
     format!("\"{escaped}\"")
 }
@@ -22,12 +22,12 @@ pub fn quote_tmux(value: &str) -> String {
 /// Suitable for hook commands and other arguments that are themselves
 /// tmux commands (may contain single quotes, double quotes, and `#{}`
 /// format strings that should be preserved literally).
-pub fn quote_tmux_cmd(value: &str) -> String {
+pub(crate) fn quote_tmux_cmd(value: &str) -> String {
     format!("{{{value}}}")
 }
 
 /// Prefix for all muster-managed tmux sessions.
-pub const SESSION_PREFIX: &str = "muster_";
+pub(crate) const SESSION_PREFIX: &str = "muster_";
 
 /// Client for executing tmux commands and parsing output.
 pub struct TmuxClient {
@@ -106,7 +106,8 @@ impl TmuxClient {
     }
 
     /// Build the argument list for a tmux command. Exposed for testing.
-    pub fn build_args<'a>(command: &'a str, extra: &[&'a str]) -> Vec<&'a str> {
+    #[cfg(test)]
+    fn build_args<'a>(command: &'a str, extra: &[&'a str]) -> Vec<&'a str> {
         let mut args = vec![command];
         args.extend_from_slice(extra);
         args
@@ -221,7 +222,7 @@ impl TmuxClient {
     }
 
     /// Parse `list-sessions -F` output into structured data.
-    pub fn parse_session_list(output: &str) -> Vec<TmuxSession> {
+    fn parse_session_list(output: &str) -> Vec<TmuxSession> {
         output
             .lines()
             .filter(|line| !line.is_empty())
@@ -415,7 +416,7 @@ impl TmuxClient {
     }
 
     /// Parse list-sessions output that includes @muster_* metadata.
-    pub fn parse_session_info_list(output: &str) -> Vec<SessionInfo> {
+    fn parse_session_info_list(output: &str) -> Vec<SessionInfo> {
         output
             .lines()
             .filter(|line| !line.is_empty())
@@ -459,7 +460,7 @@ impl TmuxClient {
     }
 
     /// Parse `list-panes -s -F` output into structured data.
-    pub fn parse_pane_list(output: &str) -> Vec<TmuxPane> {
+    fn parse_pane_list(output: &str) -> Vec<TmuxPane> {
         output
             .lines()
             .filter(|line| !line.is_empty())
@@ -545,7 +546,7 @@ impl TmuxClient {
     }
 
     /// Parse `list-windows -F` output into structured data.
-    pub fn parse_window_list(output: &str) -> Vec<TmuxWindow> {
+    fn parse_window_list(output: &str) -> Vec<TmuxWindow> {
         output
             .lines()
             .filter(|line| !line.is_empty())
