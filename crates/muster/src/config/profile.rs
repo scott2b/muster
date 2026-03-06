@@ -435,15 +435,9 @@ mod tests {
             tab.layout.as_deref(),
             Some("5a4a,204x51,0,0{102x51,0,0,0,101x51,103,0,1}")
         );
-        assert_eq!(
-            tab.panes[0].cwd.as_deref(),
-            Some("/home/user/project/src")
-        );
+        assert_eq!(tab.panes[0].cwd.as_deref(), Some("/home/user/project/src"));
         assert_eq!(tab.panes[0].command.as_deref(), Some("vim ."));
-        assert_eq!(
-            tab.panes[1].cwd.as_deref(),
-            Some("/home/user/project")
-        );
+        assert_eq!(tab.panes[1].cwd.as_deref(), Some("/home/user/project"));
         assert_eq!(tab.panes[1].command.as_deref(), Some("cargo watch"));
     }
 

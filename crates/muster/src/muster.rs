@@ -287,8 +287,7 @@ impl Muster {
         }
 
         // Capture pane layout for the new pin
-        let (layout, panes) =
-            self.capture_window_layout(&ctx.session_name, ctx.window_index)?;
+        let (layout, panes) = self.capture_window_layout(&ctx.session_name, ctx.window_index)?;
 
         // Insert tab at the position matching its rank among pinned windows
         let mut profile = self
@@ -344,11 +343,7 @@ impl Muster {
     ///
     /// Captures the current pane geometry from tmux and updates the profile.
     /// Preserves existing per-pane commands where pane indices match.
-    fn update_pinned_layout(
-        &self,
-        ctx: &PaneContext,
-        profile_id: &str,
-    ) -> Result<PinResult> {
+    fn update_pinned_layout(&self, ctx: &PaneContext, profile_id: &str) -> Result<PinResult> {
         let (new_layout, new_panes) =
             self.capture_window_layout(&ctx.session_name, ctx.window_index)?;
 
@@ -385,10 +380,10 @@ impl Muster {
             .into_iter()
             .enumerate()
             .map(|(i, mut new_pane)| {
-                if let Some(old_pane) = tab.panes.get(i) {
-                    if new_pane.command.is_none() {
-                        new_pane.command = old_pane.command.clone();
-                    }
+                if let Some(old_pane) = tab.panes.get(i)
+                    && new_pane.command.is_none()
+                {
+                    new_pane.command.clone_from(&old_pane.command);
                 }
                 new_pane
             })
@@ -504,11 +499,11 @@ impl Muster {
         session::theme::set_color(&self.client, session, color, &display_name)?;
 
         // Persist to profile if this is a muster-managed session
-        if let Some(profile_id) = session.strip_prefix("muster_") {
-            if let Some(mut profile) = self.profiles.get(profile_id)? {
-                profile.color = session::theme::resolve_color(color)?;
-                self.profiles.update(profile)?;
-            }
+        if let Some(profile_id) = session.strip_prefix("muster_")
+            && let Some(mut profile) = self.profiles.get(profile_id)?
+        {
+            profile.color = session::theme::resolve_color(color)?;
+            self.profiles.update(profile)?;
         }
 
         Ok(())
@@ -545,7 +540,9 @@ mod tests {
     use tempfile::TempDir;
 
     fn ensure_anchor() {
-        let Ok(client) = crate::TmuxClient::new() else { return };
+        let Ok(client) = crate::TmuxClient::new() else {
+            return;
+        };
         let _ = client.new_session("muster_test_anchor", "anchor", "/tmp", None);
         let _ = client.cmd(&["set-option", "-s", "exit-empty", "off"]);
     }

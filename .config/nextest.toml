@@ -1,3 +1,15 @@
+[store]
+dir = "target/nextest"
+
+[profile.default]
+retries = 0
+fail-fast = true
+slow-timeout = { period = "60s" }
+
+[profile.ci]
+retries = 2
+fail-fast = false
+
 [test-groups.tmux-integration]
 # Integration tests share a single tmux server and must run serially
 # to avoid server crashes from concurrent access.

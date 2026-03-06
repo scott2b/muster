@@ -517,7 +517,14 @@ impl TmuxClient {
     /// Capture the layout string for a window.
     pub fn get_window_layout(&self, session: &str, window_index: u32) -> Result<String> {
         let target = format!("{session}:{window_index}");
-        let output = self.cmd(&["display-message", "-t", &target, "-p", "-F", "#{window_layout}"])?;
+        let output = self.cmd(&[
+            "display-message",
+            "-t",
+            &target,
+            "-p",
+            "-F",
+            "#{window_layout}",
+        ])?;
         Ok(output.trim().to_string())
     }
 
@@ -565,7 +572,9 @@ mod tests {
     /// `exit-empty off` so the server doesn't exit when a test kills its
     /// last session.
     fn ensure_anchor() {
-        let Ok(client) = TmuxClient::new() else { return };
+        let Ok(client) = TmuxClient::new() else {
+            return;
+        };
         // Always try to create — ignore "duplicate session" errors
         let _ = client.new_session("muster_test_anchor", "anchor", "/tmp", None);
         // Belt-and-suspenders: prevent server exit even if anchor is killed

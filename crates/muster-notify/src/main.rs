@@ -2,18 +2,18 @@
 //!
 //! Usage: `muster-notify <title> <body> [--session S] [--window W] [--terminal T] [--timeout N]`
 //!
-//! Sends a UNUserNotificationCenter notification with a "Go to source" action.
+//! Sends a `UNUserNotificationCenter` notification with a "Go to source" action.
 //! On click: tmux select-window → open terminal attached to the session.
 //! Process exits after click or timeout.
 //!
-//! Flow is event-driven via CFRunLoop:
-//!   main() → request auth → [run loop] → auth callback → send notification
-//!   → [run loop] → click callback → handle_click → stop run loop → exit
+//! Flow is event-driven via `CFRunLoop`:
+//!   `main()` → request auth → [run loop] → auth callback → send notification
+//!   → [run loop] → click callback → `handle_click` → stop run loop → exit
 //!
 //! Requirements:
 //!   - Must be in a .app bundle with matching Info.plist + codesign
 //!   - Must be launched via `open MusterNotify.app --args ...`
-//!   - NSApplication init required for permission dialog on first run
+//!   - `NSApplication` init required for permission dialog on first run
 
 use std::cell::RefCell;
 use std::env;
@@ -26,18 +26,17 @@ use std::time::Duration;
 use block2::{DynBlock, RcBlock};
 use objc2::rc::Retained;
 use objc2::runtime::{Bool, ProtocolObject};
-use objc2::{define_class, msg_send, AnyThread, DefinedClass};
+use objc2::{AnyThread, DefinedClass, define_class, msg_send};
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
 use objc2_core_foundation::CFRunLoop;
 use objc2_foundation::{
-    ns_string, MainThreadMarker, NSArray, NSError, NSObject, NSObjectProtocol, NSSet, NSString,
+    MainThreadMarker, NSArray, NSError, NSObject, NSObjectProtocol, NSSet, NSString, ns_string,
 };
 use objc2_user_notifications::{
-    UNAuthorizationOptions, UNMutableNotificationContent, UNNotification,
-    UNNotificationAction, UNNotificationActionOptions, UNNotificationCategory,
-    UNNotificationCategoryOptions, UNNotificationPresentationOptions,
-    UNNotificationRequest, UNNotificationResponse, UNNotificationSound,
-    UNUserNotificationCenter, UNUserNotificationCenterDelegate,
+    UNAuthorizationOptions, UNMutableNotificationContent, UNNotification, UNNotificationAction,
+    UNNotificationActionOptions, UNNotificationCategory, UNNotificationCategoryOptions,
+    UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
+    UNNotificationSound, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
 };
 
 // ---------------------------------------------------------------------------
@@ -92,7 +91,7 @@ impl Args {
                 "--terminal" => {
                     i += 1;
                     if let Some(val) = raw.get(i) {
-                        terminal = val.clone();
+                        terminal.clone_from(val);
                     }
                 }
                 "--timeout" => {
@@ -103,8 +102,8 @@ impl Args {
                 }
                 _ => {
                     match positional {
-                        0 => title = raw[i].clone(),
-                        1 => body = raw[i].clone(),
+                        0 => title.clone_from(&raw[i]),
+                        1 => body.clone_from(&raw[i]),
                         _ => {}
                     }
                     positional += 1;
@@ -160,10 +159,8 @@ define_class!(
             _notification: &UNNotification,
             handler: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>,
         ) {
-            handler.call((
-                UNNotificationPresentationOptions::Banner
-                    | UNNotificationPresentationOptions::Sound,
-            ));
+            handler.call((UNNotificationPresentationOptions::Banner
+                | UNNotificationPresentationOptions::Sound,));
         }
 
         // User tapped notification content or the "Go to source" action button.
@@ -213,9 +210,10 @@ impl NotificationDelegate {
 // ---------------------------------------------------------------------------
 
 fn tmux_bin() -> String {
-    which::which("tmux")
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "/opt/homebrew/bin/tmux".into())
+    which::which("tmux").map_or_else(
+        |_| "/opt/homebrew/bin/tmux".into(),
+        |p| p.to_string_lossy().to_string(),
+    )
 }
 
 fn handle_click(session: Option<&str>, window: Option<&str>, terminal: &str) {
@@ -230,7 +228,9 @@ fn handle_click(session: Option<&str>, window: Option<&str>, terminal: &str) {
         .is_ok_and(|o| o.status.success());
 
     if !session_exists {
-        log(&format!("[muster-notify] session {sess} no longer exists, skipping"));
+        log(&format!(
+            "[muster-notify] session {sess} no longer exists, skipping"
+        ));
         return;
     }
 
@@ -244,7 +244,9 @@ fn handle_click(session: Option<&str>, window: Option<&str>, terminal: &str) {
     }
 
     // Open a new terminal window attached to the session.
-    log(&format!("[muster-notify] opening {terminal}: tmux attach -t {sess}"));
+    log(&format!(
+        "[muster-notify] opening {terminal}: tmux attach -t {sess}"
+    ));
 
     match terminal {
         "ghostty" => {
@@ -274,7 +276,11 @@ fn handle_click(session: Option<&str>, window: Option<&str>, terminal: &str) {
                 .status();
         }
         _ => {
-            let app_name = if terminal == "terminal" { "Terminal" } else { terminal };
+            let app_name = if terminal == "terminal" {
+                "Terminal"
+            } else {
+                terminal
+            };
             let cmd = format!("{tmux} attach -t {sess}");
             let script = format!(
                 "tell application \"{app_name}\"\n\
@@ -291,12 +297,7 @@ fn handle_click(session: Option<&str>, window: Option<&str>, terminal: &str) {
 // Send notification
 // ---------------------------------------------------------------------------
 
-fn send_notification(
-    center: &UNUserNotificationCenter,
-    title: &str,
-    body: &str,
-    has_source: bool,
-) {
+fn send_notification(center: &UNUserNotificationCenter, title: &str, body: &str, has_source: bool) {
     if has_source {
         let action = UNNotificationAction::actionWithIdentifier_title_options(
             ns_string!("GO_TO_SOURCE_ACTION"),
@@ -330,21 +331,18 @@ fn send_notification(
             .map(|d| d.as_millis())
             .unwrap_or(0)
     ));
-    let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
-        &req_id,
-        &content,
-        None,
-    );
+    let request =
+        UNNotificationRequest::requestWithIdentifier_content_trigger(&req_id, &content, None);
 
     let add_block = RcBlock::new(|error: *mut NSError| {
-        if !error.is_null() {
+        if error.is_null() {
+            log("[muster-notify] notification sent");
+        } else {
             let err = unsafe { &*error };
             log(&format!("[muster-notify] failed to send: {err:?}"));
             if let Some(rl) = CFRunLoop::main() {
                 rl.stop();
             }
-        } else {
-            log("[muster-notify] notification sent");
         }
     });
 
@@ -367,14 +365,17 @@ fn main() {
     // NSApplication init as accessory (no dock icon). Required for the
     // notification permission dialog to appear on first run.
     let mtm = MainThreadMarker::new().expect("must run on main thread");
-    let _app = NSApplication::sharedApplication(mtm);
-    _app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+    let app = NSApplication::sharedApplication(mtm);
+    app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
     let center = UNUserNotificationCenter::currentNotificationCenter();
 
     // Delegate is forgotten (leaked) — process is short-lived.
-    let delegate =
-        NotificationDelegate::new(args.session.clone(), args.window.clone(), args.terminal.clone());
+    let delegate = NotificationDelegate::new(
+        args.session.clone(),
+        args.window.clone(),
+        args.terminal.clone(),
+    );
     center.setDelegate(Some(ProtocolObject::from_ref(&*delegate)));
     std::mem::forget(delegate);
 

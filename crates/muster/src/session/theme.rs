@@ -44,37 +44,39 @@ pub const NAMED_COLORS: &[(&str, &[&str], &str)] = &[
 /// Bare color names in `NAMED_COLORS` may differ from the base here
 /// (e.g. bare `red` is the classic terminal value, not Tailwind red-500).
 pub const TAILWIND_SHADES: &[(&str, &str, &str, &str)] = &[
-    ("slate",   "#cbd5e1", "#64748b", "#334155"),
-    ("gray",    "#d1d5db", "#6b7280", "#374151"),
-    ("red",     "#fca5a5", "#ef4444", "#b91c1c"),
-    ("orange",  "#fdba74", "#f97316", "#c2410c"),
-    ("amber",   "#fcd34d", "#f59e0b", "#b45309"),
-    ("yellow",  "#fde047", "#eab308", "#a16207"),
-    ("lime",    "#bef264", "#84cc16", "#4d7c0f"),
-    ("green",   "#86efac", "#22c55e", "#15803d"),
+    ("slate", "#cbd5e1", "#64748b", "#334155"),
+    ("gray", "#d1d5db", "#6b7280", "#374151"),
+    ("red", "#fca5a5", "#ef4444", "#b91c1c"),
+    ("orange", "#fdba74", "#f97316", "#c2410c"),
+    ("amber", "#fcd34d", "#f59e0b", "#b45309"),
+    ("yellow", "#fde047", "#eab308", "#a16207"),
+    ("lime", "#bef264", "#84cc16", "#4d7c0f"),
+    ("green", "#86efac", "#22c55e", "#15803d"),
     ("emerald", "#6ee7b7", "#10b981", "#047857"),
-    ("teal",    "#5eead4", "#14b8a6", "#0f766e"),
-    ("cyan",    "#67e8f9", "#06b6d4", "#0e7490"),
-    ("sky",     "#7dd3fc", "#0ea5e9", "#0369a1"),
-    ("blue",    "#93c5fd", "#3b82f6", "#1d4ed8"),
-    ("indigo",  "#a5b4fc", "#6366f1", "#4338ca"),
-    ("violet",  "#c4b5fd", "#8b5cf6", "#6d28d9"),
-    ("purple",  "#d8b4fe", "#a855f7", "#7e22ce"),
+    ("teal", "#5eead4", "#14b8a6", "#0f766e"),
+    ("cyan", "#67e8f9", "#06b6d4", "#0e7490"),
+    ("sky", "#7dd3fc", "#0ea5e9", "#0369a1"),
+    ("blue", "#93c5fd", "#3b82f6", "#1d4ed8"),
+    ("indigo", "#a5b4fc", "#6366f1", "#4338ca"),
+    ("violet", "#c4b5fd", "#8b5cf6", "#6d28d9"),
+    ("purple", "#d8b4fe", "#a855f7", "#7e22ce"),
     ("fuchsia", "#f0abfc", "#d946ef", "#a21caf"),
-    ("pink",    "#f9a8d4", "#ec4899", "#be185d"),
-    ("rose",    "#fda4af", "#f43f5e", "#be123c"),
+    ("pink", "#f9a8d4", "#ec4899", "#be185d"),
+    ("rose", "#fda4af", "#f43f5e", "#be123c"),
 ];
 
 /// Compute a lighter variant by mixing 50% toward white.
+#[allow(clippy::cast_possible_truncation)] // midpoint of u8 values fits in u8
 fn computed_light(hex: &str) -> Option<String> {
     let (r, g, b) = hex_to_rgb(hex).ok()?;
-    let lr = (u16::from(r) + 255) / 2;
-    let lg = (u16::from(g) + 255) / 2;
-    let lb = (u16::from(b) + 255) / 2;
-    Some(rgb_to_hex(lr as u8, lg as u8, lb as u8))
+    let lr = u16::midpoint(u16::from(r), 255) as u8;
+    let lg = u16::midpoint(u16::from(g), 255) as u8;
+    let lb = u16::midpoint(u16::from(b), 255) as u8;
+    Some(rgb_to_hex(lr, lg, lb))
 }
 
 /// Compute a darker variant by scaling channels to 45%.
+#[allow(clippy::cast_possible_truncation)] // 45% of a u8 value fits in u8
 fn computed_dark(hex: &str) -> Option<String> {
     let (r, g, b) = hex_to_rgb(hex).ok()?;
     let dr = (u16::from(r) * 45 / 100) as u8;
@@ -247,8 +249,7 @@ impl ThemeValues {
     }
 
     /// Stale layout indicator: yellow dot, shown conditionally via tmux format.
-    const STALE_INDICATOR: &'static str =
-        "#{?#{@muster_layout_stale},#[fg=#c4a000]\u{25cf} ,}";
+    const STALE_INDICATOR: &'static str = "#{?#{@muster_layout_stale},#[fg=#c4a000]\u{25cf} ,}";
 
     /// Window-level option key/value pairs for window-status styling.
     pub fn window_options(&self) -> Vec<(String, String)> {
@@ -257,14 +258,17 @@ impl ThemeValues {
                 "window-status-format".into(),
                 format!(
                     "#[bg={},fg={}]  #I: #W {}",
-                    self.color, self.fg, Self::STALE_INDICATOR
+                    self.color,
+                    self.fg,
+                    Self::STALE_INDICATOR
                 ),
             ),
             (
                 "window-status-current-format".into(),
                 format!(
                     "#[fg={},bg=#000000,bold]  #I: #W {}#[default]",
-                    self.color, Self::STALE_INDICATOR
+                    self.color,
+                    Self::STALE_INDICATOR
                 ),
             ),
             ("window-status-separator".into(), String::new()),
@@ -371,7 +375,9 @@ pub fn build_launch_theme_commands(
     commands.push(format!(
         "set-hook -t {} after-split-window {}",
         session,
-        quote_tmux_cmd("if-shell -F '#{@muster_pinned}' 'set-window-option @muster_layout_stale 1'"),
+        quote_tmux_cmd(
+            "if-shell -F '#{@muster_pinned}' 'set-window-option @muster_layout_stale 1'"
+        ),
     ));
 
     // Hook: sync window renames to the profile for pinned windows
@@ -651,7 +657,9 @@ mod tests {
     }
 
     fn ensure_anchor() {
-        let Ok(client) = TmuxClient::new() else { return };
+        let Ok(client) = TmuxClient::new() else {
+            return;
+        };
         let _ = client.new_session("muster_test_anchor", "anchor", "/tmp", None);
         let _ = client.cmd(&["set-option", "-s", "exit-empty", "off"]);
     }

@@ -19,7 +19,8 @@ fn parse_tab(input: &str) -> Result<TabProfile, String> {
     }
     let name = parts[0].to_string();
     let cwd = if parts[1] == "." {
-        std::env::current_dir().map_or_else(|_| ".".to_string(), |p| p.to_string_lossy().to_string())
+        std::env::current_dir()
+            .map_or_else(|_| ".".to_string(), |p| p.to_string_lossy().to_string())
     } else {
         parts[1].to_string()
     };
@@ -182,10 +183,7 @@ fn tmux_path() -> PathBuf {
 fn exec_tmux_attach(session: &str, settings: &muster::Settings) -> ! {
     if std::env::var_os("TMUX").is_some() {
         // Inside tmux — open a new terminal window instead of nesting.
-        let terminal = settings
-            .terminal
-            .as_deref()
-            .unwrap_or("ghostty");
+        let terminal = settings.terminal.as_deref().unwrap_or("ghostty");
         let tmux = tmux_path();
         let tmux_str = tmux.to_string_lossy();
 
@@ -217,7 +215,11 @@ fn exec_tmux_attach(session: &str, settings: &muster::Settings) -> ! {
                     .status();
             }
             _ => {
-                let app = if terminal == "terminal" { "Terminal" } else { terminal };
+                let app = if terminal == "terminal" {
+                    "Terminal"
+                } else {
+                    terminal
+                };
                 let cmd = format!("{tmux_str} attach -t {session}");
                 let script = format!(
                     "tell application \"{app}\"\n\
@@ -246,15 +248,9 @@ fn exec_tmux_attach(session: &str, settings: &muster::Settings) -> ! {
 /// Send a notification, preferring native macOS desktop notifications when available.
 ///
 /// On macOS (outside SSH), launches `MusterNotify.app` via `open` — this provides
-/// native UNUserNotificationCenter banners with click-to-source navigation.
+/// native `UNUserNotificationCenter` banners with click-to-source navigation.
 /// Falls back to tmux display-message if the helper isn't installed or fails.
-fn send_notification(
-    summary: &str,
-    body: &str,
-    session: &str,
-    window: &str,
-    terminal: &str,
-) {
+fn send_notification(summary: &str, body: &str, session: &str, window: &str, terminal: &str) {
     if cfg!(target_os = "macos") && std::env::var_os("SSH_CONNECTION").is_none() {
         let app_dir = dirs::config_dir()
             .unwrap_or_default()
@@ -296,7 +292,7 @@ fn send_notification(
 
 /// Install the MusterNotify.app notification helper bundle into ~/.config/muster/.
 ///
-/// macOS requires a CFBundleIdentifier for persistent Notification Center access.
+/// macOS requires a `CFBundleIdentifier` for persistent Notification Center access.
 /// This creates a minimal .app bundle containing the `muster-notify` binary,
 /// codesigns it, and prints instructions for first-run permission grant.
 fn setup_notifications() -> Result<(), Box<dyn std::error::Error>> {
@@ -475,10 +471,7 @@ fn render_tree(tree: &[ProcessTree], prefix: &str) {
     for (i, node) in tree.iter().enumerate() {
         let is_last = i == tree.len() - 1;
         let connector = if is_last { "└─" } else { "├─" };
-        println!(
-            "{prefix}{connector} {} (PID {})",
-            node.command, node.pid
-        );
+        println!("{prefix}{connector} {} (PID {})", node.command, node.pid);
         let child_prefix = if is_last {
             format!("{prefix}   ")
         } else {
@@ -574,6 +567,7 @@ struct ResourceEntry {
 }
 
 /// Parse `ps -eo pid,ppid,%cpu,rss,comm` output into resource entries.
+#[allow(clippy::similar_names)]
 fn parse_resource_table(output: &str) -> Vec<ResourceEntry> {
     output
         .lines()
@@ -607,10 +601,7 @@ fn build_resource_table() -> Vec<ResourceEntry> {
 }
 
 /// Collect resource usage for a PID and all its descendants.
-fn collect_tree_resources(
-    root_pid: u32,
-    table: &[ResourceEntry],
-) -> (f64, u64) {
+fn collect_tree_resources(root_pid: u32, table: &[ResourceEntry]) -> (f64, u64) {
     let mut cpu = 0.0;
     let mut rss = 0u64;
     // Find direct entry for root
@@ -652,13 +643,17 @@ fn build_gpu_table() -> Option<Vec<GpuProcessInfo>> {
             let mut parts = line.split(',').map(str::trim);
             let pid: u32 = parts.next()?.parse().ok()?;
             let mem: u64 = parts.next()?.parse().ok()?;
-            Some(GpuProcessInfo { pid, gpu_memory_mb: mem })
+            Some(GpuProcessInfo {
+                pid,
+                gpu_memory_mb: mem,
+            })
         })
         .collect();
     Some(entries)
 }
 
 /// Format bytes from KB to a human-readable string.
+#[allow(clippy::cast_precision_loss)]
 fn format_memory(kb: u64) -> String {
     if kb >= 1_048_576 {
         format!("{:.1} GB", kb as f64 / 1_048_576.0)
@@ -787,7 +782,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        Command::Color { session, color, list } => {
+        Command::Color {
+            session,
+            color,
+            list,
+        } => {
             if list {
                 if cli.json {
                     let colors: Vec<serde_json::Value> = muster::NAMED_COLORS
@@ -833,9 +832,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                             format!(" ({})", aliases.join(", "))
                         };
                         if is_tty {
-                            println!(
-                                "\x1b[48;2;{r};{g};{b}m  \x1b[0m  {name}{alias_str}  {hex}",
-                            );
+                            println!("\x1b[48;2;{r};{g};{b}m  \x1b[0m  {name}{alias_str}  {hex}",);
                         } else {
                             println!("{name}{alias_str}  {hex}");
                         }
@@ -905,8 +902,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     for s in &sessions {
                         let panes = m.client().list_panes(&s.session_name).unwrap_or_default();
                         // Group panes by window
-                        let mut window_map: std::collections::BTreeMap<u32, Vec<&muster::TmuxPane>> =
-                            std::collections::BTreeMap::new();
+                        let mut window_map: std::collections::BTreeMap<
+                            u32,
+                            Vec<&muster::TmuxPane>,
+                        > = std::collections::BTreeMap::new();
                         for pane in &panes {
                             window_map.entry(pane.window_index).or_default().push(pane);
                         }
@@ -969,10 +968,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                             println!("  [{}] {} {}", w.index, w.name, w.cwd);
                             if let Some(w_panes) = pane_map.get(&w.index) {
                                 for pane in w_panes {
-                                    println!(
-                                        "      {} (PID {})",
-                                        pane.command, pane.pid
-                                    );
+                                    println!("      {} (PID {})", pane.command, pane.pid);
                                     let children = build_tree(pane.pid, &proc_table);
                                     render_tree(&children, "        ");
                                 }
@@ -1030,10 +1026,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         let windows = m.client().list_windows(&s.session_name).unwrap_or_default();
 
                         // Map window index -> name
-                        let window_names: std::collections::HashMap<u32, String> = windows
-                            .iter()
-                            .map(|w| (w.index, w.name.clone()))
-                            .collect();
+                        let window_names: std::collections::HashMap<u32, String> =
+                            windows.iter().map(|w| (w.index, w.name.clone())).collect();
 
                         for pane in &panes {
                             // Build tree from pane PID and collect all descendant PIDs
@@ -1241,6 +1235,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     println!("{}", serde_json::to_string_pretty(&json_sessions)?);
                 } else {
+                    struct WindowStats {
+                        index: u32,
+                        name: String,
+                        cpu: f64,
+                        rss: u64,
+                        gpu: u64,
+                    }
+
                     let mut total_cpu = 0.0;
                     let mut total_rss = 0u64;
                     let mut total_gpu = 0u64;
@@ -1257,15 +1259,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                             std::collections::BTreeMap::new();
                         for pane in &panes {
                             pane_map.entry(pane.window_index).or_default().push(pane);
-                        }
-
-                        // Collect per-window stats
-                        struct WindowStats {
-                            index: u32,
-                            name: String,
-                            cpu: f64,
-                            rss: u64,
-                            gpu: u64,
                         }
 
                         let proc_table_for_gpu = build_process_table();
@@ -1310,7 +1303,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
                         // Session header
                         let gpu_str = if has_gpu {
-                            format!("  GPU: {} MB", session_gpu)
+                            format!("  GPU: {session_gpu} MB")
                         } else {
                             String::new()
                         };
@@ -1349,7 +1342,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     // Summary line if multiple sessions
                     if sessions.len() > 1 {
                         let gpu_str = if has_gpu {
-                            format!("  GPU: {} MB", total_gpu)
+                            format!("  GPU: {total_gpu} MB")
                         } else {
                             String::new()
                         };
@@ -1452,11 +1445,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                             let marker = if w.active { "→" } else { " " };
                             let stale = m
                                 .client()
-                                .get_window_option(
-                                    &s.session_name,
-                                    w.index,
-                                    "@muster_layout_stale",
-                                )
+                                .get_window_option(&s.session_name, w.index, "@muster_layout_stale")
                                 .ok()
                                 .flatten()
                                 .is_some();
@@ -1469,10 +1458,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                             } else {
                                 ""
                             };
-                            println!(
-                                "  {marker} {}: {} ({}){stale_tag}",
-                                w.index, w.name, w.cwd
-                            );
+                            println!("  {marker} {}: {} ({}){stale_tag}", w.index, w.name, w.cwd);
                         }
                     }
                 }
@@ -1492,11 +1478,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 all_windows
                     .iter()
-                    .filter(|w| {
-                        windows
-                            .iter()
-                            .any(|name| w.name.eq_ignore_ascii_case(name))
-                    })
+                    .filter(|w| windows.iter().any(|name| w.name.eq_ignore_ascii_case(name)))
                     .collect()
             };
 
@@ -1510,10 +1492,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .iter()
                     .map(|win| {
                         let target = format!("{}:{}", session_name, win.index);
-                        let output = m
-                            .client()
-                            .capture_pane(&target, lines)
-                            .unwrap_or_default();
+                        let output = m.client().capture_pane(&target, lines).unwrap_or_default();
                         serde_json::json!({
                             "window": win.name,
                             "index": win.index,
@@ -1575,7 +1554,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Command::Notifications { action } => match action {
             NotificationAction::Setup => setup_notifications()?,
             NotificationAction::Remove => uninstall_notifications()?,
-        }
+        },
 
         Command::Profile { action } => match action {
             ProfileAction::List => {
@@ -1693,10 +1672,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 println!("      layout: {layout}");
                             }
                             for (pi, pane) in tab.panes.iter().enumerate() {
-                                let pane_cwd = pane
-                                    .cwd
-                                    .as_deref()
-                                    .unwrap_or("(inherit)");
+                                let pane_cwd = pane.cwd.as_deref().unwrap_or("(inherit)");
                                 let pane_cmd = pane
                                     .command
                                     .as_deref()
@@ -1715,9 +1691,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 let toml_str = toml::to_string_pretty(&editable)?;
 
                 let saved = loop {
-                    let mut tmp = tempfile::Builder::new()
-                        .suffix(".toml")
-                        .tempfile()?;
+                    let mut tmp = tempfile::Builder::new().suffix(".toml").tempfile()?;
                     tmp.write_all(toml_str.as_bytes())?;
                     tmp.flush()?;
 
@@ -1725,9 +1699,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .or_else(|_| std::env::var("VISUAL"))
                         .unwrap_or_else(|_| "vi".to_string());
 
-                    let status = process::Command::new(&editor)
-                        .arg(tmp.path())
-                        .status()?;
+                    let status = process::Command::new(&editor).arg(tmp.path()).status()?;
 
                     if !status.success() {
                         eprintln!("Editor exited with non-zero status");
@@ -1823,10 +1795,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     if new_id != old_id {
                         // Check for active session on old ID
                         if m.resolve_session(&old_id).is_ok() {
-                            eprintln!(
-                                "Kill session for \"{}\" before renaming.",
-                                p.name
-                            );
+                            eprintln!("Kill session for \"{}\" before renaming.", p.name);
                             process::exit(1);
                         }
                     }
@@ -1956,11 +1925,31 @@ mod tests {
         //   │  └─ 102 (cargo)
         //   └─ 20 (bash)
         vec![
-            ProcessInfo { pid: 10, ppid: 1, command: "fish".into() },
-            ProcessInfo { pid: 20, ppid: 1, command: "bash".into() },
-            ProcessInfo { pid: 100, ppid: 10, command: "npm".into() },
-            ProcessInfo { pid: 101, ppid: 100, command: "node".into() },
-            ProcessInfo { pid: 102, ppid: 10, command: "cargo".into() },
+            ProcessInfo {
+                pid: 10,
+                ppid: 1,
+                command: "fish".into(),
+            },
+            ProcessInfo {
+                pid: 20,
+                ppid: 1,
+                command: "bash".into(),
+            },
+            ProcessInfo {
+                pid: 100,
+                ppid: 10,
+                command: "npm".into(),
+            },
+            ProcessInfo {
+                pid: 101,
+                ppid: 100,
+                command: "node".into(),
+            },
+            ProcessInfo {
+                pid: 102,
+                ppid: 10,
+                command: "cargo".into(),
+            },
         ]
     }
 

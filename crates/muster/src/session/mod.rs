@@ -4,7 +4,7 @@ pub mod theme;
 
 use crate::config::profile::{Profile, TabProfile};
 use crate::error::Result;
-use crate::tmux::client::{quote_tmux, quote_tmux_cmd, TmuxClient, SESSION_PREFIX};
+use crate::tmux::client::{SESSION_PREFIX, TmuxClient, quote_tmux, quote_tmux_cmd};
 use crate::tmux::types::{SessionInfo, TmuxWindow};
 
 /// Expand a leading `~` to the user's home directory.
@@ -16,10 +16,10 @@ fn expand_tilde(path: &str) -> String {
         if let Some(home) = dirs::home_dir() {
             return format!("{}/{rest}", home.display());
         }
-    } else if path == "~" {
-        if let Some(home) = dirs::home_dir() {
-            return home.to_string_lossy().into_owned();
-        }
+    } else if path == "~"
+        && let Some(home) = dirs::home_dir()
+    {
+        return home.to_string_lossy().into_owned();
     }
     path.to_string()
 }
@@ -28,10 +28,10 @@ fn expand_tilde(path: &str) -> String {
 ///
 /// Priority: explicit shell setting → `$SHELL` env var → None (tmux default).
 pub fn resolve_shell(shell_setting: Option<&str>) -> Option<String> {
-    if let Some(sh) = shell_setting {
-        if !sh.is_empty() {
-            return Some(sh.to_string());
-        }
+    if let Some(sh) = shell_setting
+        && !sh.is_empty()
+    {
+        return Some(sh.to_string());
     }
     std::env::var("SHELL").ok().filter(|s| !s.is_empty())
 }
@@ -52,11 +52,7 @@ fn build_window_pane_commands(
         // Single-pane behavior: send tab-level command
         if let Some(ref cmd) = tab.command {
             let target = format!("{session_name}:{window_index}");
-            commands.push(format!(
-                "send-keys -t {} {} Enter",
-                target,
-                quote_tmux(cmd),
-            ));
+            commands.push(format!("send-keys -t {} {} Enter", target, quote_tmux(cmd),));
         }
         return commands;
     }
@@ -89,25 +85,20 @@ fn build_window_pane_commands(
         let target = format!("{session_name}:{window_index}.{pane_idx}");
 
         // If pane 0 has a different cwd than the tab, cd into it
-        if pane_idx == 0 {
-            if let Some(ref pane_cwd) = pane.cwd {
-                if pane_cwd != &tab.cwd {
-                    let resolved = expand_tilde(pane_cwd);
-                    commands.push(format!(
-                        "send-keys -t {} {} Enter",
-                        target,
-                        quote_tmux(&format!("cd {resolved}")),
-                    ));
-                }
-            }
-        }
-
-        if let Some(ref cmd) = pane.command {
+        if pane_idx == 0
+            && let Some(ref pane_cwd) = pane.cwd
+            && pane_cwd != &tab.cwd
+        {
+            let resolved = expand_tilde(pane_cwd);
             commands.push(format!(
                 "send-keys -t {} {} Enter",
                 target,
-                quote_tmux(cmd),
+                quote_tmux(&format!("cd {resolved}")),
             ));
+        }
+
+        if let Some(ref cmd) = pane.command {
+            commands.push(format!("send-keys -t {} {} Enter", target, quote_tmux(cmd),));
         }
     }
 
@@ -120,7 +111,7 @@ fn build_window_pane_commands(
 /// - default-command (if shell specified)
 /// - Per-window pane setup (splits, layouts, send-keys)
 /// - new-window for additional tabs
-/// - Session metadata (@muster_name, @muster_color, @muster_profile)
+/// - Session metadata (@`muster_name`, @`muster_color`, @`muster_profile`)
 /// - Per-window pinned markers and tab names
 /// - Notification hooks (remain-on-exit, pane-died, alert-bell)
 /// - Theme commands (session styling, per-window styling, theme hooks)
@@ -320,7 +311,9 @@ fn build_hook_commands(session_name: &str, window_count: usize) -> Vec<String> {
     for i in 0..window_count {
         let target = format!("{session_name}:{i}");
         commands.push(format!("set-option -w -t {target} remain-on-exit on"));
-        commands.push(format!("set-hook -w -t {target} pane-died {pane_died_quoted}"));
+        commands.push(format!(
+            "set-hook -w -t {target} pane-died {pane_died_quoted}"
+        ));
     }
 
     // Session-level alert-bell hook
@@ -338,7 +331,9 @@ mod tests {
     use super::*;
 
     fn ensure_anchor() {
-        let Ok(client) = TmuxClient::new() else { return };
+        let Ok(client) = TmuxClient::new() else {
+            return;
+        };
         let _ = client.new_session("muster_test_anchor", "anchor", "/tmp", None);
         let _ = client.cmd(&["set-option", "-s", "exit-empty", "off"]);
     }
@@ -471,9 +466,7 @@ mod tests {
         create_from_profile(&client, &profile, None).expect("create session");
 
         // alert-bell is a session-level hook
-        let hooks = client
-            .cmd(&["show-hooks", "-t", &session_name])
-            .unwrap();
+        let hooks = client.cmd(&["show-hooks", "-t", &session_name]).unwrap();
         assert!(
             hooks.contains("alert-bell"),
             "alert-bell hook not found in: {hooks}"
@@ -588,8 +581,7 @@ mod tests {
 
         // Poll for the marker file instead of a fixed sleep — more robust
         // across different systems and load levels.
-        let deadline =
-            std::time::Instant::now() + std::time::Duration::from_secs(15);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
         while std::time::Instant::now() < deadline {
             if std::path::Path::new(&marker).exists() {
                 break;

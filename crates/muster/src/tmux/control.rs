@@ -466,7 +466,9 @@ mod tests {
     }
 
     fn ensure_anchor() {
-        let Ok(client) = crate::tmux::client::TmuxClient::new() else { return };
+        let Ok(client) = crate::tmux::client::TmuxClient::new() else {
+            return;
+        };
         let _ = client.new_session("muster_test_anchor", "anchor", "/tmp", None);
         let _ = client.cmd(&["set-option", "-s", "exit-empty", "off"]);
     }
@@ -517,16 +519,17 @@ mod tests {
 
             let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
             let mut received = Vec::new();
-            while let Ok(result) =
-                tokio::time::timeout_at(deadline, lines.next_line()).await
-            {
+            while let Ok(result) = tokio::time::timeout_at(deadline, lines.next_line()).await {
                 let Some(line) = result.expect("read line") else {
                     break; // EOF
                 };
                 let events = parser.feed(&line);
                 for event in events {
                     received.push(format!("{event:?}"));
-                    if matches!(event, MusterEvent::TabAdded { .. } | MusterEvent::SessionsChanged) {
+                    if matches!(
+                        event,
+                        MusterEvent::TabAdded { .. } | MusterEvent::SessionsChanged
+                    ) {
                         found = true;
                     }
                 }
@@ -534,7 +537,10 @@ mod tests {
                     break;
                 }
             }
-            assert!(found, "expected TabAdded or SessionsChanged, got: {received:?}");
+            assert!(
+                found,
+                "expected TabAdded or SessionsChanged, got: {received:?}"
+            );
 
             // Cleanup: drop stdin to let tmux exit, then kill session
             drop(stdin);
