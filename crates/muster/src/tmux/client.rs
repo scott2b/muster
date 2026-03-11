@@ -65,7 +65,10 @@ impl TmuxClient {
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
             // "no server running" is not an error for queries — just means no sessions
-            if stderr.contains("no server running") || stderr.contains("no current session") {
+            if stderr.contains("no server running")
+                || stderr.contains("no current session")
+                || stderr.contains("error connecting to")
+            {
                 return Ok(String::new());
             }
             tracing::warn!(cmd = %args.join(" "), error = %stderr, "tmux command failed");
