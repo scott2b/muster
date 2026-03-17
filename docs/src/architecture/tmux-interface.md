@@ -7,7 +7,7 @@
 | **tmux** | All running state: windows, CWDs, active window, plus `@muster_*` metadata |
 | **Config directory** | Saved profiles and settings — never runtime state |
 
-There is no application-level cache of tmux state. When the GUI or CLI needs to know what tabs a group has, it asks tmux.
+There is no application-level cache of tmux state. When a consumer needs to know what tabs a group has, it asks tmux.
 
 ## Session Metadata
 
@@ -15,14 +15,14 @@ Running session metadata is stored as tmux user options:
 
 | tmux User Option | Value | Example |
 |-----------------|-------|---------|
-| `@muster_name` | Display name | `"PKM Project"` |
+| `@muster_name` | Display name | `"Web App"` |
 | `@muster_color` | Hex color | `"#f97316"` |
-| `@muster_profile` | Profile ID | `"pkm-project"` |
+| `@muster_profile` | Profile ID | `"web-app"` |
 
 Set on creation, queryable at any time:
 
 ```bash
-tmux show-option -t muster_pkm-project -v @muster_color
+tmux show-option -t muster_web-app -v @muster_color
 tmux list-sessions -F '#{session_name} #{@muster_name} #{@muster_color}'
 ```
 

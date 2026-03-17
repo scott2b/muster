@@ -20,4 +20,4 @@ cargo install --path crates/muster-notify
 muster notifications setup
 ```
 
-This creates a minimal `Muster.app` bundle at `~/.config/muster/Muster.app/` containing the notification helper binary. The app bundle provides a `CFBundleIdentifier` that macOS requires for persistent Notification Center access. See [Notifications](../user-guide/notifications.md) for details.
+This creates a minimal `MusterNotify.app` bundle at `~/.config/muster/MusterNotify.app/` containing the notification helper binary. The app bundle provides a `CFBundleIdentifier` (`com.muster.notifier`) that macOS requires for persistent Notification Center access. See [Notifications](../user-guide/notifications.md) for details.

@@ -8,7 +8,7 @@ Muster is a Rust library and CLI for terminal session group management built on 
 - **Saves profiles** — define reusable templates for your project setups
 - **Applies color themes** — each group gets a distinct color in the tmux status bar
 - **Syncs state via tmux** — no polling, no stale state files; tmux is the single source of truth
-- **Provides a library API** — the CLI and GUI are both consumers of the same Rust library
+- **Provides a library API** — the CLI is a thin consumer of the `muster` Rust library; the API is designed for GUI integration
 
 ## Who It's For
 

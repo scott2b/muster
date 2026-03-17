@@ -13,6 +13,7 @@ This document contains the help content for the `muster` command-line program.
 * [`muster color`↴](#muster-color)
 * [`muster ps`↴](#muster-ps)
 * [`muster ports`↴](#muster-ports)
+* [`muster top`↴](#muster-top)
 * [`muster status`↴](#muster-status)
 * [`muster peek`↴](#muster-peek)
 * [`muster pin`↴](#muster-pin)
@@ -29,6 +30,8 @@ This document contains the help content for the `muster` command-line program.
 * [`muster notifications`↴](#muster-notifications)
 * [`muster notifications setup`↴](#muster-notifications-setup)
 * [`muster notifications remove`↴](#muster-notifications-remove)
+* [`muster notifications test`↴](#muster-notifications-test)
+* [`muster settings`↴](#muster-settings)
 
 ## `muster`
 
@@ -45,15 +48,17 @@ Muster organizes terminal sessions into named, color-coded groups with saved pro
 * `attach` — Attach to a running session
 * `kill` — Destroy a session
 * `new` — Create an ad-hoc session
-* `color` — Change session color live
+* `color` — Manage session colors
 * `ps` — Show processes running inside sessions
 * `ports` — Show listening ports inside sessions
+* `top` — Show resource usage (CPU, memory, GPU) for session processes
 * `status` — Show all sessions with details
 * `peek` — Peek at recent terminal output
 * `pin` — Pin the current window to the session's profile
 * `unpin` — Unpin the current window from the session's profile
 * `profile` — Profile management
 * `notifications` — Notification management
+* `settings` — Show or update settings
 
 ###### **Options:**
 
@@ -136,14 +141,18 @@ Create an ad-hoc session
 
 ## `muster color`
 
-Change session color live
+Manage session colors
 
-**Usage:** `muster color <SESSION> <COLOR>`
+**Usage:** `muster color [OPTIONS] [SESSION] [COLOR]`
 
 ###### **Arguments:**
 
 * `<SESSION>` — Profile name, ID, or session name
-* `<COLOR>` — Hex color (e.g. #f97316)
+* `<COLOR>` — New color (hex or named)
+
+###### **Options:**
+
+* `--list` — List available named colors
 
 
 
@@ -164,6 +173,18 @@ Show processes running inside sessions
 Show listening ports inside sessions
 
 **Usage:** `muster ports [PROFILE]`
+
+###### **Arguments:**
+
+* `<PROFILE>` — Profile name or ID (shows all sessions if omitted)
+
+
+
+## `muster top`
+
+Show resource usage (CPU, memory, GPU) for session processes
+
+**Usage:** `muster top [PROFILE]`
 
 ###### **Arguments:**
 
@@ -354,6 +375,7 @@ Notification management
 
 * `setup` — Install macOS notification app bundle
 * `remove` — Remove macOS notification app bundle
+* `test` — Send a test notification to verify the notification system works
 
 
 
@@ -370,6 +392,28 @@ Install macOS notification app bundle
 Remove macOS notification app bundle
 
 **Usage:** `muster notifications remove`
+
+
+
+## `muster notifications test`
+
+Send a test notification to verify the notification system works
+
+**Usage:** `muster notifications test`
+
+
+
+## `muster settings`
+
+Show or update settings
+
+**Usage:** `muster settings [OPTIONS]`
+
+###### **Options:**
+
+* `--terminal <TERMINAL>` — Set terminal emulator (e.g. ghostty, alacritty, kitty, wezterm, terminal, iterm2)
+* `--shell <SHELL>` — Set default shell
+* `--tmux-path <TMUX_PATH>` — Set tmux binary path
 
 
 

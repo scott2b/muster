@@ -56,6 +56,6 @@ All public types, functions, and modules should have rustdoc comments:
 
 The workspace enforces:
 
-- `unsafe_code = "forbid"` — no unsafe Rust
+- `unsafe_code = "deny"` — no unsafe Rust
 - `clippy::all` and `clippy::pedantic` — comprehensive linting
 - All public items documented

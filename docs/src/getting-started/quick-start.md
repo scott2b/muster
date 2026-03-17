@@ -6,19 +6,19 @@ Save a profile for a project with one or more tabs:
 
 ```bash
 # Single-tab profile
-muster profile save "PKM" --tab 'Shell:~/work/pkm' --color '#f97316'
+muster profile save "Notes" --tab 'Shell:~/work/notes' --color '#f97316'
 
 # Multi-tab profile
-muster profile save "Web App" --color orange \
+muster profile save "Web App" --color '#3b82f6' \
   --tab 'Shell:~/work/app' \
   --tab 'Server:~/work/app:npm start' \
-  --tab 'Logs:~/var/log'
+  --tab 'Logs:~/work/app/logs'
 ```
 
 ## Launch a Session
 
 ```bash
-muster launch "PKM"
+muster launch "Notes"
 ```
 
 This creates the tmux session and drops you in. You're now inside tmux — detach with `Ctrl-b d` to return to your shell.
@@ -37,10 +37,10 @@ muster status
 
 ```bash
 # By profile name
-muster launch "PKM"
+muster launch "Notes"
 
 # By session name directly
-muster attach muster_pkm
+muster attach muster_notes
 ```
 
 ## Ad-hoc Sessions
@@ -56,7 +56,7 @@ muster new "Scratch"
 Create without attaching:
 
 ```bash
-muster launch "PKM" --detach
+muster launch "Notes" --detach
 muster new "Background" --detach
 ```
 
@@ -64,10 +64,10 @@ muster new "Background" --detach
 
 ```bash
 # Add a tab to an existing profile
-muster profile add-tab "PKM" --name Editor --cwd ~/work/pkm
+muster profile add-tab "Notes" --name Editor --cwd ~/work/notes
 
 # Edit the full profile in $EDITOR
-muster profile edit "PKM"
+muster profile edit "Notes"
 ```
 
 ## Typical Workflow

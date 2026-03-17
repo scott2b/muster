@@ -12,7 +12,7 @@ crates/
 ## Design Principles
 
 1. **tmux is the runtime** — muster is an organizational layer on top of tmux, not a replacement
-2. **Library-first** — the CLI and GUI are independent consumers of the same `muster` library crate
+2. **Library-first** — the CLI is a thin consumer of the `muster` library crate; the API is designed to support GUI applications without modification
 3. **No application state** — running session metadata lives in tmux user options, not in files
 4. **Push-based sync** — control mode provides structured notifications; no polling for state
 
@@ -32,9 +32,9 @@ crates/
 ## Data Flow
 
 ```
-Commands:    GUI/CLI → library → tmux / config
+Commands:    CLI (or GUI) → library → tmux / config
 State:       Runtime state always from tmux, metadata from config files
-Events:      tmux control mode → library → GUI (via Tauri events)
+Events:      tmux control mode → library → subscribers
 ```
 
 Control mode notifications cover window lifecycle, session lifecycle, and active tab changes. CWD tracking uses tmux's native `pane_current_path` with on-demand queries.
@@ -42,26 +42,19 @@ Control mode notifications cover window lifecycle, session lifecycle, and active
 ## Component Diagram
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Tauri Application                     │
-│  ┌──────────┐ ┌──────────────┐ ┌─────────────────────┐  │
-│  │   File   │ │    Group     │ │    Search            │  │
-│  │ Browser  │ │  Launcher UI │ │  (ParavaneFS)        │  │
-│  │ (beacons)│ │              │ │                      │  │
-│  └────┬─────┘ └──────┬───────┘ └──────────────────────┘  │
-│       └──────┬───────┘                                    │
-│         ┌────▼────┐                                       │
-│         │ Tauri   │                                       │
-│         │Commands │                                       │
-│         └────┬────┘                                       │
-└──────────────┼────────────────────────────────────────────┘
+        ┌──────────────┐
+        │              │
+        │  CLI binary  │
+        │   (muster)   │
+        │              │
+        └──────┬───────┘
                │
-        ┌──────▼──────┐         ┌──────────────┐
-        │             │         │              │
-        │   muster    │◄────────│  CLI binary  │
-        │  (library)  │         │   (muster)   │
-        │             │         │              │
-        └──┬───────┬──┘         └──────────────┘
+        ┌──────▼──────┐
+        │             │
+        │   muster    │
+        │  (library)  │
+        │             │
+        └──┬───────┬──┘
            │       │
      ┌─────▼──┐ ┌──▼──────────────┐
      │ Config │ │      tmux       │

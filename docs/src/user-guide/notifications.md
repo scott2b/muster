@@ -15,7 +15,7 @@ cargo install --path crates/muster-notify
 muster notifications setup
 ```
 
-This creates a minimal `Muster.app` bundle at `~/.config/muster/Muster.app/` containing the `muster-notify` helper binary. The app bundle provides a `CFBundleIdentifier` (`com.muster.notify`) that macOS requires for persistent Notification Center access.
+This creates a minimal `MusterNotify.app` bundle at `~/.config/muster/MusterNotify.app/` containing the `muster-notify` helper binary. The app bundle provides a `CFBundleIdentifier` (`com.muster.notifier`) that macOS requires for persistent Notification Center access.
 
 macOS may prompt you to allow notifications from Muster on first use.
 
@@ -31,7 +31,7 @@ Over SSH (`SSH_CONNECTION` is set), muster falls back to `tmux display-message` 
 muster notifications remove
 ```
 
-This removes the `Muster.app` bundle. Notifications revert to tmux status bar messages.
+This removes the `MusterNotify.app` bundle. Notifications revert to tmux status bar messages.
 
 ## How It Works
 

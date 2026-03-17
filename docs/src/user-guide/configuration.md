@@ -18,10 +18,29 @@ Muster stores configuration in `~/.config/muster/` by default. Override with `--
 
 ```json
 {
-  "tmux_path": null,
-  "shell": "/usr/local/bin/fish"
+  "terminal": "ghostty",
+  "shell": "/usr/local/bin/fish",
+  "tmux_path": null
 }
 ```
+
+Settings can be viewed and updated with the `muster settings` command:
+
+```bash
+# Show current settings
+muster settings
+
+# Update a setting
+muster settings --terminal ghostty
+muster settings --shell /usr/local/bin/fish
+muster settings --tmux-path /usr/local/bin/tmux
+```
+
+### `terminal`
+
+The terminal emulator to open when launching a session from inside tmux. If omitted, muster uses the platform default (Terminal.app on macOS; detected from PATH on Linux).
+
+Supported values: `ghostty`, `kitty`, `alacritty`, `wezterm`, `terminal` (Terminal.app), `iterm2`.
 
 ### `shell`
 

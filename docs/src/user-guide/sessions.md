@@ -30,11 +30,14 @@ If `--tab` is omitted, defaults to a single "Shell" tab at `$HOME`.
 ## Attaching
 
 ```bash
-# By profile name or session name
+# By profile name
+muster attach "My Project"
+
+# By full session name
 muster attach muster_my-project
 
 # Switch to a specific window on attach
-muster attach muster_my-project --window 2
+muster attach "My Project" --window 2
 ```
 
 ## Status
@@ -64,18 +67,18 @@ muster ports "My Project"
 Change a running session's color without restarting:
 
 ```bash
-muster color muster_my-project '#22c55e'
+muster color "My Project" '#22c55e'
 ```
 
-The tmux status bar updates instantly. This does not update the profile — to persist the color change, use `muster profile update`.
+Accepts a profile name, session ID, or full session name. The tmux status bar updates instantly. This does not update the profile — to persist the color change, use `muster profile update`.
 
 ## Destroying Sessions
 
 ```bash
-muster kill muster_my-project
+muster kill "My Project"
 ```
 
-Session metadata dies with the tmux session — no file cleanup needed.
+Accepts a profile name, session ID, or full session name. Session metadata dies with the tmux session — no file cleanup needed.
 
 ## JSON Output
 
