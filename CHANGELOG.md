@@ -7,6 +7,19 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.3.0] - 2026-03-17
+
+### Changed
+- Unified CLI error handling: all command handlers now return `CliError` instead
+  of calling `process::exit(1)`. Reduced exit calls from 23 to 3 (exec_tmux_attach
+  and main error handler only).
+- Added `CliError` type with `User` (display as-is) and `Internal` (wrapped library
+  errors) variants, plus `bail!` macro for ergonomic early returns.
+
+### Fixed
+- Added `"server exited"` and `"server not found"` to tmux soft error patterns,
+  preventing crashes when the tmux server shuts down between operations.
+
 ## [0.2.0] - 2026-03-17
 
 ### Changed
