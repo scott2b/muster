@@ -7,6 +7,15 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.4.0] - 2026-03-17
+
+### Added
+- 28 CLI integration tests via `assert_cmd`: profile CRUD, list, color,
+  error cases, and no-session behavior for status/ps/ports/top.
+- Tests use `TMUX_TMPDIR` isolation and seeded temp config dirs.
+- Coverage baseline established with `cargo-llvm-cov`: 60% line coverage
+  across the workspace (135 tests with `--run-ignored all`).
+
 ## [0.3.0] - 2026-03-17
 
 ### Changed
