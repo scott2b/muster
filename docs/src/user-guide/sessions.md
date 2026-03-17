@@ -60,7 +60,7 @@ Change a running session's color without restarting:
 muster color webapp '#22c55e'
 ```
 
-Accepts a profile name, session ID, or full session name. The tmux status bar updates instantly. This does not update the profile — to persist the color change, use `muster profile update`.
+Accepts a profile name, session ID, or full session name. The tmux status bar updates instantly. The profile is also updated, so the color persists on next `muster up`. If no session is running, updates the profile directly.
 
 ## Stopping Sessions
 
