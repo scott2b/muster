@@ -54,6 +54,30 @@ muster up sysmon
 
 The Processes tab now runs `htop`.
 
+## Terminal Configuration
+
+When you run `muster up` from inside an existing tmux session, muster opens a new terminal window rather than nesting sessions. It needs to know which terminal emulator to use.
+
+Check the current setting:
+
+```bash
+muster settings
+```
+
+If it shows the wrong terminal, update it:
+
+```bash
+muster settings --terminal ghostty
+muster settings --terminal kitty
+muster settings --terminal alacritty
+muster settings --terminal wezterm
+muster settings --terminal iterm2
+```
+
+On macOS the default is Terminal.app (`terminal`). On Linux muster probes PATH for a known terminal. You only need to set this once — it persists in `~/.config/muster/settings.json`.
+
+See [Configuration](../user-guide/configuration.md) for all available settings.
+
 ## Create Your Own Profile
 
 Save a profile for a project:
