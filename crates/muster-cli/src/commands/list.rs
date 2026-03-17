@@ -1,5 +1,5 @@
 use super::CommandContext;
-use crate::format::color_dot;
+use crate::format::{color_dot, red};
 
 pub(crate) fn execute(ctx: &CommandContext) -> crate::error::Result {
     let profiles = ctx.muster.list_profiles()?;
@@ -25,12 +25,25 @@ pub(crate) fn execute(ctx: &CommandContext) -> crate::error::Result {
         if !sessions.is_empty() {
             println!("\nSessions:");
             for s in &sessions {
+                let unpinned = ctx
+                    .muster
+                    .count_unpinned_windows(&s.session_name)
+                    .unwrap_or(0);
+                let window_info = if unpinned > 0 {
+                    format!(
+                        "{} windows, {}",
+                        s.window_count,
+                        red(&format!("{unpinned} unpinned"))
+                    )
+                } else {
+                    format!("{} windows", s.window_count)
+                };
                 println!(
-                    "  {} {} — {} ({} windows){}",
+                    "  {} {} — {} ({}){}",
                     color_dot(&s.color),
                     s.session_name,
                     s.display_name,
-                    s.window_count,
+                    window_info,
                     if s.attached { " [attached]" } else { "" }
                 );
             }

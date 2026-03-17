@@ -1,3 +1,5 @@
+pub(crate) mod adopt;
+pub(crate) mod release;
 pub(crate) mod attach;
 pub(crate) mod color;
 pub(crate) mod hooks;
@@ -11,6 +13,7 @@ pub(crate) mod peek;
 pub(crate) mod pin;
 pub(crate) mod profile;
 pub(crate) mod settings;
+pub(crate) mod shell_init;
 pub(crate) mod status;
 
 use std::path::PathBuf;

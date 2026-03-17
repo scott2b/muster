@@ -95,6 +95,75 @@ impl Muster {
         self.profiles.list()
     }
 
+    /// Mark all current windows in a session as pinned.
+    ///
+    /// Sets `@muster_pinned` and `@muster_tab_name` on each window and applies
+    /// the colored styling. Used after `adopt --save` so the status bar reflects
+    /// that the tabs are now backed by a profile.
+    pub fn pin_session_windows(&self, session_name: &str) -> Result<()> {
+        let color = self
+            .client
+            .get_option(session_name, "@muster_color")?
+            .unwrap_or_else(|| "#808080".to_string());
+        let display_name = self
+            .client
+            .get_option(session_name, "@muster_name")?
+            .unwrap_or_else(|| session_name.to_string());
+
+        let windows = self.client.list_windows(session_name)?;
+        for win in &windows {
+            session::theme::apply_pinned_window_style(
+                &self.client,
+                session_name,
+                win.index,
+                &color,
+                &display_name,
+            )?;
+            self.client.set_window_option(
+                session_name,
+                win.index,
+                "@muster_tab_name",
+                &win.name,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Count windows in a session that are not pinned to a profile.
+    pub fn count_unpinned_windows(&self, session_name: &str) -> Result<usize> {
+        let windows = self.client.list_windows(session_name)?;
+        let count = windows
+            .iter()
+            .filter(|w| {
+                self.client
+                    .get_window_option(session_name, w.index, "@muster_pinned")
+                    .ok()
+                    .flatten()
+                    .is_none()
+            })
+            .count();
+        Ok(count)
+    }
+
+    /// Snapshot a running tmux session's windows into a new profile.
+    ///
+    /// Queries `list-windows` to capture window names and CWDs, then constructs
+    /// a `Profile` without saving it. The caller is responsible for persisting
+    /// via `save_profile()`.
+    pub fn snapshot_session(&self, session_name: &str) -> Result<Vec<TabProfile>> {
+        let windows = self.client.list_windows(session_name)?;
+        Ok(windows
+            .into_iter()
+            .map(|w| TabProfile {
+                name: w.name,
+                cwd: w.cwd,
+                command: None,
+                layout: None,
+                panes: vec![],
+            })
+            .collect())
+    }
+
     /// Get a profile by ID.
     pub fn get_profile(&self, id: &str) -> Result<Option<Profile>> {
         self.profiles.get(id)
@@ -177,6 +246,105 @@ impl Muster {
             return Ok(input.to_string());
         }
         Err(Error::SessionNotFound(input.to_string()))
+    }
+
+    /// Adopt an existing (non-muster) tmux session under muster management.
+    ///
+    /// Renames the session to `muster_{id}` and sets `@muster_*` user options.
+    /// Applies the muster status-bar theme. Does not write a profile file.
+    pub fn adopt(
+        &self,
+        session_name: &str,
+        name: &str,
+        color: &str,
+    ) -> Result<SessionInfo> {
+        if !self.client.has_session(session_name)? {
+            return Err(Error::SessionNotFound(session_name.to_string()));
+        }
+
+        let id = crate::config::profile::slugify(name);
+        let new_session_name = format!("muster_{id}");
+        let resolved_color = session::theme::resolve_color(color)?;
+
+        // Rename the session
+        self.client
+            .cmd(&["rename-session", "-t", session_name, &new_session_name])?;
+
+        // Set muster metadata
+        self.client.cmd(&[
+            "set-option",
+            "-t",
+            &new_session_name,
+            "@muster_name",
+            name,
+        ])?;
+        self.client.cmd(&[
+            "set-option",
+            "-t",
+            &new_session_name,
+            "@muster_color",
+            &resolved_color,
+        ])?;
+        self.client.cmd(&[
+            "set-option",
+            "-t",
+            &new_session_name,
+            "@muster_profile",
+            &id,
+        ])?;
+
+        // Apply theme
+        session::theme::set_color(&self.client, &new_session_name, &resolved_color, name)?;
+
+        let windows = self.client.list_windows(&new_session_name)?;
+        let window_count = u32::try_from(windows.len()).unwrap_or(1);
+
+        Ok(SessionInfo {
+            session_name: new_session_name,
+            display_name: name.to_string(),
+            color: resolved_color,
+            profile_id: Some(id),
+            window_count,
+            attached: false,
+        })
+    }
+
+    /// Release a muster-managed session back to plain tmux.
+    ///
+    /// Strips theming, clears `@muster_*` metadata, removes hooks, and renames
+    /// the session. The session keeps running; it just loses muster management.
+    /// Returns the new session name.
+    pub fn release(&self, session_name: &str, new_name: Option<&str>) -> Result<String> {
+        if !self.client.has_session(session_name)? {
+            return Err(Error::SessionNotFound(session_name.to_string()));
+        }
+
+        let windows = self.client.list_windows(session_name)?;
+        let window_indices: Vec<u32> = windows.iter().map(|w| w.index).collect();
+
+        // Strip all muster theming and metadata
+        let commands = session::theme::build_release_commands(session_name, &window_indices);
+        for cmd in &commands {
+            let parts: Vec<&str> = cmd.split_whitespace().collect();
+            let _ = self.client.cmd(&parts); // best-effort: ignore errors for unset
+        }
+
+        // Determine new name: explicit override, or strip muster_ prefix
+        let target_name = if let Some(n) = new_name {
+            n.to_string()
+        } else {
+            session_name
+                .strip_prefix("muster_")
+                .unwrap_or(session_name)
+                .to_string()
+        };
+
+        if target_name != session_name {
+            self.client
+                .cmd(&["rename-session", "-t", session_name, &target_name])?;
+        }
+
+        Ok(target_name)
     }
 
     /// Destroy (kill) a tmux session.
@@ -605,6 +773,7 @@ mod tests {
                 layout: None,
                 panes: vec![],
             }],
+            ..Profile::default()
         };
 
         let saved = m.save_profile(profile.clone()).unwrap();

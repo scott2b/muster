@@ -58,6 +58,44 @@ muster profile remove-tab myproject Tests
 muster profile remove-tab myproject 2
 ```
 
+## Snapshotting a Running Session
+
+Capture the current tabs and working directories of a live tmux session as a new profile:
+
+```bash
+muster profile save myproject --from-session <session-name>
+```
+
+This queries the session's windows, captures their names and CWDs, and saves them as a profile. Useful for formalizing a workflow you built interactively.
+
+## Environment Variables
+
+Set per-session environment variables in a profile by editing the TOML:
+
+```bash
+muster profile edit myproject
+```
+
+```toml
+[env]
+NODE_ENV = "development"
+DATABASE_URL = "postgres://localhost/myapp"
+```
+
+These are applied via `set-environment -t <session>` when the session is created.
+
+## Per-Session tmux Options
+
+Override tmux settings for a session without touching your global `~/.tmux.conf`:
+
+```toml
+[tmux_options]
+mouse = "on"
+status-position = "top"
+```
+
+These are applied via `set-option -t <session>` at session creation.
+
 ## Deleting Profiles
 
 ```bash

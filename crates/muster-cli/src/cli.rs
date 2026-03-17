@@ -169,6 +169,47 @@ pub enum Command {
         action: NotificationAction,
     },
 
+    /// Release a muster-managed session back to plain tmux
+    Release {
+        /// Profile name, ID, or session name
+        session: String,
+        /// New name for the released session (defaults to session name without muster_ prefix)
+        #[arg(long)]
+        name: Option<String>,
+    },
+
+    /// Adopt an existing tmux session under muster management
+    Adopt {
+        /// Existing tmux session name
+        session: String,
+        /// Display name (defaults to session name)
+        #[arg(long)]
+        name: Option<String>,
+        /// Color (hex or named)
+        #[arg(long, default_value = "#808080")]
+        color: String,
+        /// Also save as a persistent profile
+        #[arg(long)]
+        save: bool,
+        /// Adopt without attaching
+        #[arg(long)]
+        detach: bool,
+    },
+
+    /// Output shell integration code for automatic profile suggestions on cd
+    #[command(name = "shell-init")]
+    ShellInit {
+        /// Shell type: fish, bash, or zsh
+        shell: String,
+    },
+
+    /// Suggest profiles matching a directory (used by shell integration)
+    #[command(name = "shell-suggest", hide = true)]
+    ShellSuggest {
+        /// Directory path to match against profile CWDs
+        dir: String,
+    },
+
     /// Show or update settings
     Settings {
         /// Set terminal emulator (e.g. ghostty, alacritty, kitty, wezterm, terminal, iterm2)
@@ -195,16 +236,19 @@ pub enum ProfileAction {
         id: String,
     },
 
-    /// Save a new profile
+    /// Save a new profile (or snapshot a running session with --from-session)
     Save {
         /// Profile name
         name: String,
         /// Tab definition (`name:cwd[:command]`), repeatable
         #[arg(long)]
         tab: Vec<String>,
-        /// Color (hex)
+        /// Color (hex or named)
         #[arg(long, default_value = "#808080")]
         color: String,
+        /// Snapshot tabs from a running tmux session
+        #[arg(long, value_name = "SESSION")]
+        from_session: Option<String>,
     },
 
     /// Add a tab to an existing profile

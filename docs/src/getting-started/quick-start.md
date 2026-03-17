@@ -133,3 +133,5 @@ muster new scratch
 4. **`muster up <name>`** again to reattach later
 5. **`muster status`** from another terminal to see all sessions
 6. **`muster down <name>`** when done
+
+For more detailed workflows — including adopting existing tmux sessions, saving a session as a profile, and releasing sessions back to plain tmux — see [Workflows](../user-guide/workflows.md).

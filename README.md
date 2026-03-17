@@ -5,7 +5,7 @@ Terminal session group management built on tmux. A Rust library and CLI for orga
 ## Prerequisites
 
 - **tmux** — installed and available in PATH
-- **Rust** — 2021 edition (for building from source)
+- **Rust** — 2024 edition (for building from source)
 
 ## Installation
 
@@ -16,12 +16,12 @@ cargo install --path crates/muster-cli
 ## Quick Start
 
 ```bash
-muster profile save "PKM" --tab 'Shell:~/work/pkm' --color '#f97316'
-muster launch "PKM"
+muster profile save myproject --tab 'Shell:~/work/myproject' --color '#f97316'
+muster up myproject
 # You're inside a tmux session. Detach with Ctrl-b d.
-muster status          # check what's running
-muster launch "PKM"    # reattach
-muster kill muster_pkm # tear down
+muster status           # check what's running
+muster up myproject     # reattach
+muster down myproject   # tear down
 ```
 
 ## Documentation

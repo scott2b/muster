@@ -51,7 +51,7 @@ pub fn slugify(name: &str) -> String {
 }
 
 /// A session template defining tabs, colors, and startup behavior.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Profile {
     /// URL-safe slug identifier (e.g., `"my-project"`).
     pub id: String,
@@ -61,6 +61,12 @@ pub struct Profile {
     pub color: String,
     /// Ordered list of tabs to create on launch.
     pub tabs: Vec<TabProfile>,
+    /// Environment variables to set in the session (e.g. `NODE_ENV=development`).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub env: HashMap<String, String>,
+    /// Per-session tmux options to apply via `set-option -t` (e.g. `mouse=on`).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub tmux_options: HashMap<String, String>,
 }
 
 /// A tab (tmux window) within a profile.
@@ -209,6 +215,7 @@ mod tests {
                 layout: None,
                 panes: vec![],
             }],
+            ..Profile::default()
         }
     }
 
@@ -393,6 +400,7 @@ mod tests {
                     panes: vec![],
                 },
             ],
+            ..Profile::default()
         };
 
         let json = serde_json::to_string(&profile).unwrap();
@@ -422,6 +430,7 @@ mod tests {
                     },
                 ],
             }],
+            ..Profile::default()
         };
 
         let json = serde_json::to_string(&profile).unwrap();
@@ -518,6 +527,7 @@ mod tests {
                 layout: None,
                 panes: vec![],
             }],
+            ..Profile::default()
         };
         insta::assert_json_snapshot!(profile);
     }
@@ -544,6 +554,7 @@ mod tests {
                     },
                 ],
             }],
+            ..Profile::default()
         };
         insta::assert_json_snapshot!(profile);
     }

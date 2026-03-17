@@ -10,6 +10,7 @@
 # User Guide
 
 - [Concepts](user-guide/concepts.md)
+- [Workflows](user-guide/workflows.md)
 - [Profiles](user-guide/profiles.md)
 - [Sessions](user-guide/sessions.md)
 - [Colors](user-guide/colors.md)

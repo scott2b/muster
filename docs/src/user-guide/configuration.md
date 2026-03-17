@@ -53,3 +53,31 @@ Overrides tmux discovery from `$PATH`. Set this if tmux is installed in a non-st
 ## Profiles (`profiles.json`)
 
 See [Profiles](profiles.md) for the full profile schema and management commands.
+
+## Shell Integration
+
+Muster can suggest launching profiles when you `cd` into a directory associated with one. Add the shell hook to your shell config:
+
+**Fish** — add to `~/.config/fish/config.fish`:
+
+```fish
+muster shell-init fish | source
+```
+
+**Bash** — add to `~/.bashrc` or `~/.bash_profile`:
+
+```bash
+eval "$(muster shell-init bash)"
+```
+
+**Zsh** — add to `~/.zshrc`:
+
+```zsh
+eval "$(muster shell-init zsh)"
+```
+
+After setup, when you `cd` into a directory that matches a profile tab's CWD, muster prints a suggestion:
+
+```
+muster: profile 'webapp' matches this directory. Run: muster up webapp
+```

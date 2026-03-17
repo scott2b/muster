@@ -64,6 +64,22 @@ The tmux status bar updates instantly and the profile is updated, so the color p
 
 See [Colors](colors.md) for the full list of named colors and shade variants.
 
+## Adopting Existing Sessions
+
+Bring an existing (non-muster) tmux session under muster management:
+
+```bash
+muster adopt mysession --name webapp --color '#3b82f6'
+```
+
+This renames the session to `muster_webapp` and applies the muster status-bar theme. The `--name` flag defaults to the original session name. No profile is written — the session is managed live.
+
+To also save a profile from the session's current tabs:
+
+```bash
+muster adopt mysession --name webapp --color '#3b82f6' --save
+```
+
 ## Stopping Sessions
 
 ```bash

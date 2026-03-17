@@ -30,6 +30,9 @@ This document contains the help content for the `muster` command-line program.
 * [`muster notifications setup`↴](#muster-notifications-setup)
 * [`muster notifications remove`↴](#muster-notifications-remove)
 * [`muster notifications test`↴](#muster-notifications-test)
+* [`muster release`↴](#muster-release)
+* [`muster adopt`↴](#muster-adopt)
+* [`muster shell-init`↴](#muster-shell-init)
 * [`muster settings`↴](#muster-settings)
 
 ## `muster`
@@ -56,6 +59,9 @@ Muster organizes terminal sessions into named, color-coded groups with saved pro
 * `unpin` — Unpin the current tab from the session's profile
 * `profile` — Profile management
 * `notifications` — Notification management
+* `release` — Release a muster-managed session back to plain tmux
+* `adopt` — Adopt an existing tmux session under muster management
+* `shell-init` — Output shell integration code for automatic profile suggestions on cd
 * `settings` — Show or update settings
 
 ###### **Options:**
@@ -228,7 +234,7 @@ Profile management
 
 * `list` — List all profiles
 * `delete` — Delete a profile
-* `save` — Save a new profile
+* `save` — Save a new profile (or snapshot a running session with --from-session)
 * `add-tab` — Add a tab to an existing profile
 * `show` — Show a profile's full definition
 * `edit` — Edit a profile in $EDITOR
@@ -259,7 +265,7 @@ Delete a profile
 
 ## `muster profile save`
 
-Save a new profile
+Save a new profile (or snapshot a running session with --from-session)
 
 **Usage:** `muster profile save [OPTIONS] <NAME>`
 
@@ -270,9 +276,10 @@ Save a new profile
 ###### **Options:**
 
 * `--tab <TAB>` — Tab definition (`name:cwd[:command]`), repeatable
-* `--color <COLOR>` — Color (hex)
+* `--color <COLOR>` — Color (hex or named)
 
   Default value: `#808080`
+* `--from-session <SESSION>` — Snapshot tabs from a running tmux session
 
 
 
@@ -383,6 +390,55 @@ Remove macOS notification app bundle
 Send a test notification to verify the notification system works
 
 **Usage:** `muster notifications test`
+
+
+
+## `muster release`
+
+Release a muster-managed session back to plain tmux
+
+**Usage:** `muster release [OPTIONS] <SESSION>`
+
+###### **Arguments:**
+
+* `<SESSION>` — Profile name, ID, or session name
+
+###### **Options:**
+
+* `--name <NAME>` — New name for the released session (defaults to session name without muster_ prefix)
+
+
+
+## `muster adopt`
+
+Adopt an existing tmux session under muster management
+
+**Usage:** `muster adopt [OPTIONS] <SESSION>`
+
+###### **Arguments:**
+
+* `<SESSION>` — Existing tmux session name
+
+###### **Options:**
+
+* `--name <NAME>` — Display name (defaults to session name)
+* `--color <COLOR>` — Color (hex or named)
+
+  Default value: `#808080`
+* `--save` — Also save as a persistent profile
+* `--detach` — Adopt without attaching
+
+
+
+## `muster shell-init`
+
+Output shell integration code for automatic profile suggestions on cd
+
+**Usage:** `muster shell-init <SHELL>`
+
+###### **Arguments:**
+
+* `<SHELL>` — Shell type: fish, bash, or zsh
 
 
 

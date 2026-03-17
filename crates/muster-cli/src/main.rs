@@ -24,6 +24,7 @@ fn default_config_dir() -> PathBuf {
         .join("muster")
 }
 
+#[allow(clippy::too_many_lines)]
 fn run() -> error::Result {
     let cli = Cli::parse();
     let config_dir = cli.config_dir.unwrap_or_else(default_config_dir);
@@ -93,9 +94,18 @@ fn run() -> error::Result {
         Command::Profile { action } => match action {
             ProfileAction::List => commands::profile::execute_list(&ctx),
             ProfileAction::Delete { id } => commands::profile::execute_delete(&ctx, &id),
-            ProfileAction::Save { name, tab, color } => {
-                commands::profile::execute_save(&ctx, &name, &tab, &color)
-            }
+            ProfileAction::Save {
+                name,
+                tab,
+                color,
+                from_session,
+            } => commands::profile::execute_save(
+                &ctx,
+                &name,
+                &tab,
+                &color,
+                from_session.as_deref(),
+            ),
             ProfileAction::AddTab {
                 profile,
                 name,
@@ -111,6 +121,18 @@ fn run() -> error::Result {
                 commands::profile::execute_remove_tab(&ctx, &profile, &tab)
             }
         },
+        Command::Release { session, name } => {
+            commands::release::execute(&ctx, &session, name.as_deref())
+        }
+        Command::Adopt {
+            session,
+            name,
+            color,
+            save,
+            detach,
+        } => commands::adopt::execute(&ctx, &session, name.as_deref(), &color, save, detach),
+        Command::ShellInit { shell } => commands::shell_init::execute(&shell),
+        Command::ShellSuggest { dir } => commands::adopt::execute_suggest(&ctx, &dir),
         Command::Settings {
             terminal,
             shell,

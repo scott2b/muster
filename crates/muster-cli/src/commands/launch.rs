@@ -13,12 +13,21 @@ pub(crate) fn execute(
         .iter()
         .find(|p| p.name == profile || p.id == profile);
 
-    let Some(p) = found else {
-        bail!("Profile not found: {profile}");
+    // If no profile matches, try resolving as a live session name (e.g. adopted sessions)
+    let info = if let Some(p) = found {
+        ctx.muster.launch(&p.id)?
+    } else {
+        match ctx.muster.resolve_session(profile) {
+            Ok(session_name) => {
+                let sessions = ctx.muster.list_sessions()?;
+                sessions
+                    .into_iter()
+                    .find(|s| s.session_name == session_name)
+                    .ok_or_else(|| muster::Error::SessionNotFound(profile.to_string()))?
+            }
+            Err(_) => bail!("Profile not found: {profile}"),
+        }
     };
-    let profile_id = p.id.clone();
-
-    let info = ctx.muster.launch(&profile_id)?;
 
     if let Some(idx) = tab {
         ctx.muster.switch_window(&info.session_name, idx)?;

@@ -17,6 +17,7 @@ pub(crate) fn execute(
         name: name.to_string(),
         color,
         tabs,
+        ..muster::Profile::default()
     };
 
     ctx.muster.save_profile(profile.clone())?;

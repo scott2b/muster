@@ -12,6 +12,14 @@ pub(crate) fn color_dot(hex: &str) -> String {
     }
 }
 
+/// Render text in red ANSI color. Falls back to plain text if not a TTY.
+pub(crate) fn red(text: &str) -> String {
+    if !std::io::stdout().is_terminal() {
+        return text.to_string();
+    }
+    format!("\x1b[38;2;204;0;0m{text}\x1b[0m")
+}
+
 /// Format bytes from KB to a human-readable string.
 #[allow(clippy::cast_precision_loss)]
 pub(crate) fn format_memory(kb: u64) -> String {

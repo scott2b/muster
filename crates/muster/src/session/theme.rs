@@ -399,6 +399,58 @@ fn build_theme_commands(
     Ok(commands)
 }
 
+/// Build tmux commands to strip all muster theming from a session.
+///
+/// Resets session-level options and hooks to their defaults, and resets
+/// per-window styling and metadata. After running these commands the session
+/// looks like a plain tmux session.
+pub(crate) fn build_release_commands(session: &str, window_indices: &[u32]) -> Vec<String> {
+    let session_opts = [
+        "status-style",
+        "status-left",
+        "status-position",
+        "mouse",
+        "default-command",
+        "@muster_name",
+        "@muster_color",
+        "@muster_profile",
+    ];
+    let session_hooks = [
+        "after-new-window",
+        "after-split-window",
+        "after-rename-window",
+        "alert-bell",
+    ];
+    let window_opts = [
+        "window-status-format",
+        "window-status-current-format",
+        "window-status-separator",
+        "remain-on-exit",
+    ];
+    let window_user_opts = ["@muster_pinned", "@muster_tab_name", "@muster_layout_stale"];
+
+    let mut commands = Vec::new();
+
+    for key in &session_opts {
+        commands.push(format!("set-option -u -t {session} {key}"));
+    }
+    for hook in &session_hooks {
+        commands.push(format!("set-hook -u -t {session} {hook}"));
+    }
+    for idx in window_indices {
+        let target = format!("{session}:{idx}");
+        for key in &window_opts {
+            commands.push(format!("set-window-option -u -t {target} {key}"));
+        }
+        for key in &window_user_opts {
+            commands.push(format!("set-option -u -w -t {target} {key}"));
+        }
+        commands.push(format!("set-hook -u -w -t {target} pane-died"));
+    }
+
+    commands
+}
+
 /// Apply colored (pinned) styling to a single window.
 pub(crate) fn apply_pinned_window_style(
     client: &TmuxClient,

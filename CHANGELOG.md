@@ -7,6 +7,41 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.5.0] - 2026-03-17
+
+### Added
+- `muster adopt <session>` — bring a plain tmux session under muster management.
+  Renames to `muster_<id>`, applies muster theming, and attaches. `--name` sets
+  display name; `--color` sets session color; `--save` snapshots current windows
+  into a profile and pins them immediately (red dots cleared on adopt); `--detach`
+  skips attach.
+- `muster release <session>` — remove muster management from a session while
+  keeping it alive. Strips all theming, hooks, and metadata; renames back to plain
+  tmux name. Profile is preserved for future `muster up`.
+- `muster shell-init <shell>` — print shell integration code for fish/bash/zsh.
+  Hooks `cd` to suggest `muster up` when entering a directory matching a saved
+  profile. Eval in shell rc: `muster shell-init fish | source`.
+- `env` field on profiles — key/value environment variables applied to the tmux
+  session via `set-environment` at launch.
+- `tmux_options` field on profiles — key/value tmux options applied to the session
+  via `set-option` at launch (e.g. `mouse`, `history-limit`).
+- `muster profile save --from-session <session>` — snapshot current windows of a
+  live session into a new profile. Pins all windows immediately so red dots clear.
+- `count_unpinned_windows()` — library function counting windows without muster pin.
+- `muster list` now shows unpinned window count in red when a session has ephemeral
+  (unpinned) tabs, e.g. `(3 windows, 1 unpinned)`.
+- Workflows documentation page covering six concrete session/profile lifecycle
+  scenarios: Profile First, Session First, Adopting Plain tmux, Formalizing
+  Ephemeral, Editing + Bouncing, and Releasing.
+
+### Changed
+- `muster up` falls back to `resolve_session` when no matching profile is found,
+  so `muster up <session-name>` works for adopted sessions.
+- `Profile` now derives `Default`; all internal struct literals use
+  `..Profile::default()` instead of explicit empty `HashMap::new()` calls.
+
+---
+
 ## [0.4.0] - 2026-03-17
 
 ### Changed

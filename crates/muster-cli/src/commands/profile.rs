@@ -62,18 +62,33 @@ pub(crate) fn execute_save(
     name: &str,
     tab: &[String],
     color: &str,
+    from_session: Option<&str>,
 ) -> crate::error::Result {
-    let tabs = build_tabs(tab)?;
     let color = muster::session::theme::resolve_color(color)?;
+
+    let (tabs, live_session) = if let Some(session) = from_session {
+        let session_name = ctx.muster.resolve_session(session)?;
+        let tabs = ctx.muster.snapshot_session(&session_name)?;
+        (tabs, Some(session_name))
+    } else {
+        (build_tabs(tab)?, None)
+    };
 
     let profile = muster::Profile {
         id: muster::config::profile::slugify(name),
         name: name.to_string(),
         color,
         tabs,
+        ..muster::Profile::default()
     };
 
     let saved = ctx.muster.save_profile(profile)?;
+
+    // Pin the live session's windows now that the profile exists
+    if let Some(session_name) = live_session {
+        ctx.muster.pin_session_windows(&session_name)?;
+    }
+
     if ctx.json {
         println!("{}", serde_json::to_string_pretty(&saved)?);
     } else {

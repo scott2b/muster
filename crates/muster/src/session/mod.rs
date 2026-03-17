@@ -165,6 +165,26 @@ fn build_launch_commands(
         commands.extend(build_window_pane_commands(session_name, index, tab, shell));
     }
 
+    // Apply per-session environment variables
+    for (var, val) in &profile.env {
+        commands.push(format!(
+            "set-environment -t {} {} {}",
+            session_name,
+            quote_tmux(var),
+            quote_tmux(val),
+        ));
+    }
+
+    // Apply per-session tmux options
+    for (key, val) in &profile.tmux_options {
+        commands.push(format!(
+            "set-option -t {} {} {}",
+            session_name,
+            quote_tmux(key),
+            quote_tmux(val),
+        ));
+    }
+
     // Set metadata
     commands.push(format!(
         "set-option -t {} @muster_name {}",
@@ -354,6 +374,7 @@ mod tests {
                     panes: vec![],
                 },
             ],
+            ..Profile::default()
         }
     }
 
@@ -527,6 +548,7 @@ mod tests {
                     },
                 ],
             }],
+            ..Profile::default()
         };
         let session_name = format!("{SESSION_PREFIX}{}", profile.id);
 

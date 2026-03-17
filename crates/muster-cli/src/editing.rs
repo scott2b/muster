@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use muster::{Profile, TabProfile};
 
 /// TOML representation of a profile for interactive editing.
@@ -7,6 +9,10 @@ pub(crate) struct EditableProfile {
     pub name: String,
     pub color: String,
     pub tabs: Vec<EditableTab>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub env: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub tmux_options: HashMap<String, String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -52,6 +58,8 @@ impl From<&Profile> for EditableProfile {
                         .collect(),
                 })
                 .collect(),
+            env: p.env.clone(),
+            tmux_options: p.tmux_options.clone(),
         }
     }
 }
@@ -80,6 +88,8 @@ impl EditableProfile {
                         .collect(),
                 })
                 .collect(),
+            env: self.env,
+            tmux_options: self.tmux_options,
         }
     }
 }
