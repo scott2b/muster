@@ -1,14 +1,33 @@
 # Quick Start
 
-## Create a Profile
+## Try It: System Dashboard
 
-Save a profile for a project with one or more tabs:
+Here's a ready-to-use profile you can launch right now. It opens three tabs — a shell, a live process monitor, and a live disk usage view:
 
 ```bash
-# Single-tab profile
-muster profile save myproject --tab 'Shell:~/work/myproject' --color '#f97316'
+muster profile save sysmon --color indigo \
+  --tab 'Shell:~' \
+  --tab 'Processes:~:top' \
+  --tab 'Disk:~:sh -c "while true; do clear; df -h; sleep 5; done"'
 
-# Multi-tab profile
+muster up sysmon
+```
+
+You're now inside tmux with three tabs. Switch between them with `Ctrl-b n` (next) or `Ctrl-b 0/1/2`. Detach with `Ctrl-b d` to return to your shell — the session keeps running.
+
+> If you have `htop` installed, substitute `htop` for `top` in the Processes tab for a better experience.
+
+## Create Your Own Profile
+
+Save a profile for a project:
+
+```bash
+muster profile save myproject --tab 'Shell:~/work/myproject' --color orange
+```
+
+Multi-tab example for a web project:
+
+```bash
 muster profile save webapp --color '#3b82f6' \
   --tab 'Shell:~/work/app' \
   --tab 'Server:~/work/app:npm start' \
@@ -21,9 +40,7 @@ muster profile save webapp --color '#3b82f6' \
 muster up myproject
 ```
 
-This creates the tmux session and drops you in. You're now inside tmux — detach with `Ctrl-b d` to return to your shell.
-
-If the session already exists, `up` reattaches instead of creating a duplicate.
+This creates the tmux session and drops you in. If the session already exists, `up` reattaches instead of creating a duplicate.
 
 ## Check What's Running
 
@@ -36,38 +53,15 @@ muster status
 ## Reattach
 
 ```bash
-# By profile name
-muster up myproject
-
-# By session name directly
-muster attach muster_myproject
+muster up sysmon
 ```
 
 ## Ad-hoc Sessions
 
-Create a quick throwaway session without saving a profile:
+Create a throwaway session without saving a profile:
 
 ```bash
 muster new scratch
-```
-
-## Background Sessions
-
-Create without attaching:
-
-```bash
-muster up myproject --detach
-muster new scratch --detach
-```
-
-## Modify Profiles
-
-```bash
-# Add a tab to an existing profile
-muster profile add-tab myproject --name Editor --cwd ~/work/myproject
-
-# Edit the full profile in $EDITOR
-muster profile edit myproject
 ```
 
 ## Typical Workflow
