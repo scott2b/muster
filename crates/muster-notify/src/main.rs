@@ -216,6 +216,20 @@ fn tmux_bin() -> String {
     )
 }
 
+/// Escape a string for safe interpolation into `AppleScript` double-quoted strings.
+/// Backslashes and double quotes are the only characters that need escaping.
+fn applescript_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 fn handle_click(session: Option<&str>, window: Option<&str>, terminal: &str) {
     // No session means this was a test notification — nothing to navigate to.
     let Some(sess) = session else { return };
@@ -250,14 +264,15 @@ fn handle_click(session: Option<&str>, window: Option<&str>, terminal: &str) {
 
     match terminal {
         "ghostty" => {
-            let cmd = format!("{tmux} attach -t {sess}");
+            // Ghostty takes --command as a single string; pass args separately to avoid
+            // shell interpretation.
             let _ = Command::new("open")
                 .args([
                     "-na",
                     "Ghostty.app",
                     "--args",
                     "--quit-after-last-window-closed=true",
-                    &format!("--command={cmd}"),
+                    &format!("--command={tmux} attach -t {sess}"),
                 ])
                 .status();
         }
@@ -297,6 +312,7 @@ fn handle_click(session: Option<&str>, window: Option<&str>, terminal: &str) {
         }
         _ => {
             // AppleScript fallback — works for Terminal.app, iTerm2, etc.
+            // All interpolated values are escaped to prevent injection.
             let app_name = if terminal == "terminal" {
                 "Terminal"
             } else if terminal == "iterm2" || terminal == "iterm" {
@@ -304,11 +320,13 @@ fn handle_click(session: Option<&str>, window: Option<&str>, terminal: &str) {
             } else {
                 terminal
             };
-            let cmd = format!("{tmux} attach -t {sess}");
+            let escaped_app = applescript_escape(app_name);
+            let escaped_cmd =
+                applescript_escape(&format!("{tmux} attach -t {sess}"));
             let script = format!(
-                "tell application \"{app_name}\"\n\
+                "tell application \"{escaped_app}\"\n\
                      activate\n\
-                     do script \"{cmd}\"\n\
+                     do script \"{escaped_cmd}\"\n\
                  end tell"
             );
             let _ = Command::new("osascript").args(["-e", &script]).status();
