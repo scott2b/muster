@@ -3,6 +3,9 @@ name = "muster"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/muster"
 description = "Terminal session group management library built on tmux"
 
 [lints]
