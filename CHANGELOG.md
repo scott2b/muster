@@ -7,6 +7,13 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.5.1] - 2026-03-18
+
+### Fixed
+- Add version specifier to internal `muster` workspace dependency (required for crates.io publishing).
+
+---
+
 ## [0.5.0] - 2026-03-17
 
 ### Added
