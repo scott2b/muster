@@ -7,6 +7,19 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- `muster ports` no longer shows duplicate entries when a process listens on both
+  IPv4 and IPv6 for the same port. Deduplicates by (port, pid) ([#4]).
+
+### Changed
+- `muster ports` output now includes PID column and a header row for readability.
+
+[#4]: https://github.com/scott2b/muster/issues/4
+
+---
+
 ## [0.5.3] - 2026-03-19
 
 ### Fixed

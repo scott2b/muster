@@ -185,7 +185,9 @@ pub(crate) fn execute_ports(ctx: &CommandContext, profile: Option<&str>) -> crat
         }
     }
 
-    // Match listening ports to sessions
+    // Match listening ports to sessions, deduplicating entries that differ only
+    // by address (e.g. IPv4 vs IPv6) or file descriptor for the same port.
+    let mut seen = std::collections::HashSet::new();
     let mut matched: Vec<MatchedPort> = listening
         .iter()
         .filter_map(|lp| {
@@ -203,6 +205,7 @@ pub(crate) fn execute_ports(ctx: &CommandContext, profile: Option<&str>) -> crat
                 },
             )
         })
+        .filter(|mp| seen.insert((mp.port, mp.pid)))
         .collect();
 
     if matched.is_empty() {
@@ -248,11 +251,15 @@ pub(crate) fn execute_ports(ctx: &CommandContext, profile: Option<&str>) -> crat
                     mp.display_name,
                     mp.session_name,
                 );
+                println!(
+                    "  {:<7} {:<8} {:<16} {:<5} NAME",
+                    "PORT", "PID", "COMMAND", "WIN",
+                );
                 current_session.clone_from(&mp.session_name);
             }
             println!(
-                "  :{:<6} {:<16} [{}] {}",
-                mp.port, mp.command, mp.window_index, mp.window_name,
+                "  :{:<6} {:<8} {:<16} [{}]   {}",
+                mp.port, mp.pid, mp.command, mp.window_index, mp.window_name,
             );
         }
     }
