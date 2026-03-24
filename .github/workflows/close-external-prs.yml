@@ -1,4 +1,3 @@
-# .github/workflows/close-external-prs.yml
 name: Close external PRs
 
 on:
@@ -9,26 +8,25 @@ jobs:
   close:
     runs-on: ubuntu-latest
     steps:
-      - name: Close PR if not owner
+      - name: Close PR if from fork
         uses: actions/github-script@v7
         with:
           script: |
             const pr = context.payload.pull_request;
             const owner = context.repo.owner;
-            const allowed = [owner];
+            const repo = context.repo.repo;
 
-      
-            if (!allowed.includes(pr.user.login)) {
+            if (pr.head.repo.fork) {
               await github.rest.issues.createComment({
                 owner,
-                repo: context.repo.repo,
+                repo,
                 issue_number: pr.number,
                 body: "This repository does not accept public pull requests."
               });
 
               await github.rest.pulls.update({
                 owner,
-                repo: context.repo.repo,
+                repo,
                 pull_number: pr.number,
                 state: "closed"
               });
