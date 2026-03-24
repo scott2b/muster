@@ -1,3 +1,5 @@
+**⛔ Not accepting public PRs at this time**
+
 # Muster
 
 Terminal session group management built on tmux. A Rust library and CLI for organizing terminal sessions into named, color-coded groups with saved profiles, runtime theming, and push-based state synchronization via tmux control mode.
