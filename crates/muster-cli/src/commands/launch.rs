@@ -38,7 +38,7 @@ pub(crate) fn execute(
     } else if detach {
         println!("Launched: {} ({})", info.display_name, info.session_name);
     } else {
-        exec_tmux_attach(&info.session_name, &ctx.settings);
+        exec_tmux_attach(&info.session_name, Some(&info.display_name), &ctx.settings);
     }
 
     Ok(())

@@ -45,7 +45,7 @@ pub(crate) fn execute(
         return Ok(());
     }
 
-    exec_tmux_attach(&info.session_name, &ctx.settings)
+    exec_tmux_attach(&info.session_name, Some(&info.display_name), &ctx.settings)
 }
 
 pub(crate) fn execute_suggest(ctx: &CommandContext, dir: &str) -> crate::error::Result {

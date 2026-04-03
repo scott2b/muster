@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Pending
+
+### Fixed
+- #13 Muster now names terminal tabs after the session name. Tested in Ghostty. 
+
 ---
 
 ## [0.5.5] - 2026-03-19

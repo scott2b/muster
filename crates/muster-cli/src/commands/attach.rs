@@ -12,5 +12,12 @@ pub(crate) fn execute(
         ctx.muster.switch_window(&session_name, idx)?;
     }
 
-    exec_tmux_attach(&session_name, &ctx.settings);
+    let display_name = ctx
+        .muster
+        .list_sessions()?
+        .into_iter()
+        .find(|s| s.session_name == session_name)
+        .map(|s| s.display_name);
+
+    exec_tmux_attach(&session_name, display_name.as_deref(), &ctx.settings);
 }

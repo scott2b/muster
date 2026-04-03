@@ -1,3 +1,4 @@
+use std::io::{self, IsTerminal, Write};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process;
@@ -192,17 +193,47 @@ fn open_terminal_linux(terminal: &str, session: &str, tmux_str: &str) {
     }
 }
 
+/// Strip control characters from a terminal title to avoid injecting escape codes.
+fn sanitize_title(title: &str) -> Option<String> {
+    let sanitized: String = title.chars().filter(|c| !c.is_control()).collect();
+    if sanitized.is_empty() {
+        None
+    } else {
+        Some(sanitized)
+    }
+}
+
+/// Emit OSC 0 to set the current terminal's title/tab text.
+fn set_terminal_title(title: &str) {
+    let Some(clean) = sanitize_title(title) else {
+        return;
+    };
+    let mut stdout = io::stdout();
+    if !stdout.is_terminal() {
+        return;
+    }
+    let _ = write!(stdout, "\x1b]0;{}\x07", clean);
+    let _ = stdout.flush();
+}
+
 /// Attach to a tmux session.
 ///
 /// If already inside tmux (`$TMUX` set), opens a new terminal window with the
 /// session attached instead of nesting. Otherwise replaces the current process
 /// with `tmux attach-session`.
-pub(crate) fn exec_tmux_attach(session: &str, settings: &muster::Settings) -> ! {
+pub(crate) fn exec_tmux_attach(
+    session: &str,
+    display_name: Option<&str>,
+    settings: &muster::Settings,
+) -> ! {
     if std::env::var_os("TMUX").is_some() {
         let terminal = resolve_terminal(settings);
         open_terminal_with_tmux(&terminal, session);
         process::exit(0);
     }
+
+    let title = display_name.unwrap_or(session);
+    set_terminal_title(title);
 
     let err = process::Command::new(tmux_path())
         .args(["attach-session", "-t", session])
