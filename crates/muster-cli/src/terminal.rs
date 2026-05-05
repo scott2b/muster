@@ -244,33 +244,29 @@ pub(crate) fn exec_tmux_attach(
     process::exit(1);
 }
 
-/// Query the bundled helper's version. Returns `None` if the binary is missing
-/// or fails to report a version (treated as "unknown" — no warning fires).
-fn helper_version(helper_bin: &std::path::Path) -> Option<String> {
-    let output = process::Command::new(helper_bin)
-        .arg("--version")
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (!v.is_empty()).then_some(v)
+/// Path to the version stamp file written by `setup_notifications`.
+fn version_stamp_path(bundle_dir: &std::path::Path) -> std::path::PathBuf {
+    bundle_dir.join("Contents/Resources/version")
 }
 
-/// Warn via tmux display-message if the bundled helper's version doesn't match
+/// Warn via tmux display-message if the bundle's stamped version doesn't match
 /// the cli. Catches the common case of `cargo install` updating the cli without
 /// re-running `muster notifications setup`.
-fn warn_on_helper_drift(helper_bin: &std::path::Path) {
+///
+/// We deliberately use a stamp file rather than spawning the helper binary —
+/// invoking the helper synchronously could trigger a real notification on older
+/// bundles that don't recognize a version flag.
+fn warn_on_helper_drift(bundle_dir: &std::path::Path) {
     let cli = env!("CARGO_PKG_VERSION");
-    let Some(helper) = helper_version(helper_bin) else {
-        return;
-    };
-    if helper == cli {
+    let stamped = std::fs::read_to_string(version_stamp_path(bundle_dir))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    if stamped == cli {
         return;
     }
     let msg = format!(
-        "muster-notify out of date (bundle: {helper}, cli: {cli}). Run: muster notifications setup"
+        "muster-notify out of date (bundle: {stamped}, cli: {cli}). Run: muster notifications setup"
     );
     let _ = process::Command::new(tmux_path())
         .args(["display-message", "-d", "5000", &msg])
@@ -294,7 +290,7 @@ pub(crate) fn send_notification(
             .unwrap_or_default()
             .join("muster/MusterNotify.app");
         if app_dir.exists() {
-            warn_on_helper_drift(&app_dir.join("Contents/MacOS/muster-notify"));
+            warn_on_helper_drift(&app_dir);
             let spawned = process::Command::new("open")
                 .args([
                     "-n",
@@ -396,6 +392,15 @@ pub(crate) fn setup_notifications() -> crate::error::Result {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755))?;
     }
+
+    // Stamp the bundle with the cli version. send_notification reads this to
+    // detect drift when the cli is updated without re-running setup.
+    let resources_dir = app_dir.join("Resources");
+    std::fs::create_dir_all(&resources_dir)?;
+    std::fs::write(
+        version_stamp_path(&bundle_dir),
+        env!("CARGO_PKG_VERSION"),
+    )?;
 
     // Codesign the bundle (ad-hoc signature, required for notification permissions)
     let codesign_status = process::Command::new("codesign")
