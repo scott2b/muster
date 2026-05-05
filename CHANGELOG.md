@@ -7,8 +7,32 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Pending
 
+---
+
+## [0.5.6] - 2026-05-05
+
 ### Fixed
-- #13 Muster now names terminal tabs after the session name. Tested in Ghostty. 
+- #13 Muster now names terminal tabs after the session name. Tested in Ghostty.
+- `muster-notify` on macOS no longer substitutes the body "Notifications are
+  working." in place of an explicitly empty body (e.g. bell events). The
+  first-run test fallback now only fires when no positional arguments are
+  passed.
+
+### Changed
+- The `MusterNotify.app` bundle now tracks the workspace version:
+  `Info.plist`'s `CFBundleVersion` is set from `CARGO_PKG_VERSION` at install
+  time, and a stamp file at `Contents/Resources/version` lets the cli detect
+  drift after a `cargo install` that didn't re-run `muster notifications
+  setup`, warning via `tmux display-message`.
+- `muster-notify` accepts `--version`, printing the workspace version.
+- SPECIFICATION.md §3.1 now documents the path-convention split: portable
+  artifacts live at `~/.config/muster/`; the macOS notification bundle lives
+  at `~/Library/Application Support/muster/MusterNotify.app/`. Cross-references
+  added at the relevant code sites so the rationale is reachable from either
+  end.
+- `muster` and `muster-cli` now ship the workspace README on crates.io
+  (`readme = "../../README.md"` in each crate's Cargo.toml). Prior releases
+  shipped without one, leaving blank crate pages.
 
 ---
 
