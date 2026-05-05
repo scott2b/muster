@@ -112,11 +112,11 @@ impl Args {
             i += 1;
         }
 
-        // No args: send a test notification (used for first-run permission grant)
-        if title.is_empty() {
+        // No positional args at all: send a test notification (used for first-run
+        // permission grant). Don't override an explicitly-empty body (e.g. bell
+        // events pass title only) with the test message.
+        if positional == 0 {
             title = "Muster".to_string();
-        }
-        if body.is_empty() {
             body = "Notifications are working.".to_string();
         }
 
