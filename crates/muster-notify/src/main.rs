@@ -395,6 +395,14 @@ fn send_notification(center: &UNUserNotificationCenter, title: &str, body: &str,
 // ---------------------------------------------------------------------------
 
 fn main() {
+    // Handshake: cli queries `muster-notify --version` to detect a stale
+    // bundle binary. Must run before NSApplication init so it stays cheap
+    // and side-effect free.
+    if env::args().skip(1).any(|a| a == "--version") {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
     let _ = std::fs::write(LOG_PATH, "");
 
     let args = Args::parse_from_env();

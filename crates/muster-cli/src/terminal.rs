@@ -244,6 +244,39 @@ pub(crate) fn exec_tmux_attach(
     process::exit(1);
 }
 
+/// Query the bundled helper's version. Returns `None` if the binary is missing
+/// or fails to report a version (treated as "unknown" — no warning fires).
+fn helper_version(helper_bin: &std::path::Path) -> Option<String> {
+    let output = process::Command::new(helper_bin)
+        .arg("--version")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let v = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!v.is_empty()).then_some(v)
+}
+
+/// Warn via tmux display-message if the bundled helper's version doesn't match
+/// the cli. Catches the common case of `cargo install` updating the cli without
+/// re-running `muster notifications setup`.
+fn warn_on_helper_drift(helper_bin: &std::path::Path) {
+    let cli = env!("CARGO_PKG_VERSION");
+    let Some(helper) = helper_version(helper_bin) else {
+        return;
+    };
+    if helper == cli {
+        return;
+    }
+    let msg = format!(
+        "muster-notify out of date (bundle: {helper}, cli: {cli}). Run: muster notifications setup"
+    );
+    let _ = process::Command::new(tmux_path())
+        .args(["display-message", "-d", "5000", &msg])
+        .status();
+}
+
 /// Send a notification, preferring native macOS desktop notifications when available.
 ///
 /// On macOS (outside SSH), launches `MusterNotify.app` via `open` — this provides
@@ -261,6 +294,7 @@ pub(crate) fn send_notification(
             .unwrap_or_default()
             .join("muster/MusterNotify.app");
         if app_dir.exists() {
+            warn_on_helper_drift(&app_dir.join("Contents/MacOS/muster-notify"));
             let spawned = process::Command::new("open")
                 .args([
                     "-n",
@@ -310,7 +344,8 @@ pub(crate) fn setup_notifications() -> crate::error::Result {
     std::fs::create_dir_all(&macos_dir)?;
 
     // Write Info.plist
-    let plist = r#"<?xml version="1.0" encoding="UTF-8"?>
+    let plist = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -325,13 +360,15 @@ pub(crate) fn setup_notifications() -> crate::error::Result {
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleVersion</key>
-  <string>1.0</string>
+  <string>{version}</string>
   <key>LSUIElement</key>
   <true/>
 </dict>
 </plist>
-"#;
-    std::fs::write(app_dir.join("Info.plist"), plist)?;
+"#,
+        version = env!("CARGO_PKG_VERSION"),
+    );
+    std::fs::write(app_dir.join("Info.plist"), &plist)?;
 
     // Find muster-notify binary:
     // 1. Next to the running muster binary (e.g. both in ~/.cargo/bin/)
