@@ -108,12 +108,20 @@ There is no application-level cache of tmux state. There is no runtime state fil
 ~/.config/muster/
 ├── profiles.json             # Saved terminal group profiles
 ├── settings.json             # Global settings (tmux path, shell preference)
-├── logs/                     # Death snapshots (last output from exited panes)
-│   └── <session_name>/
-│       └── <window_name>.last
-└── Muster.app/               # macOS notification helper (created by `muster setup-notifications`)
+└── logs/                     # Death snapshots (last output from exited panes)
+    └── <session_name>/
+        └── <window_name>.last
+```
+
+Plus, on macOS only, a separate notification helper bundle:
+
+```
+~/Library/Application Support/muster/
+└── MusterNotify.app/         # Created by `muster notifications setup`
     └── Contents/
-        ├── Info.plist         # CFBundleIdentifier: com.muster.notify
+        ├── Info.plist         # CFBundleIdentifier: com.muster.notifier
+        ├── Resources/
+        │   └── version       # Stamp file used to detect drift vs. cli
         └── MacOS/
             └── muster-notify  # Notification delivery binary
 ```
@@ -121,6 +129,8 @@ There is no application-level cache of tmux state. There is no runtime state fil
 That's it. No runtime state file. Running session metadata (name, color, profile reference) is stored as tmux user options on the session itself (see Section 4.6). When a session dies, its runtime metadata dies with it — the profile retains the original values.
 
 The config directory is owned by the library but the path is provided by the consumer at initialization. The CLI defaults to `~/.config/muster/`. The GUI app points the library at the same path, keeping its own non-terminal config (feeds, UI preferences) in a separate directory. This makes CLI and GUI true peers sharing the same profiles.
+
+**Path convention.** Portable artifacts (profiles, settings, logs) live under `~/.config/muster/` on every platform — the cli hardcodes this path so the tree is identical across Linux and macOS. Platform-specific artifacts follow that platform's convention: the macOS notification helper is a `.app` bundle, which belongs under `~/Library/Application Support/` (resolved via `dirs::config_dir()`), not `~/.config/`. This is intentional, not an inconsistency: a `.app` under `~/.config/` would violate macOS conventions and confuse Launch Services tooling. New macOS-only artifacts should follow the same split.
 
 ### 3.2 Profile Schema (`profiles.json`)
 
@@ -785,7 +795,7 @@ The minimum viable library. Everything needed for session group lifecycle manage
 
 Each feature is self-contained and builds on the core without modifying it. Ordered roughly by value and implementation simplicity.
 
-**Desktop notifications** *(implemented)* — Session events (pane exits, terminal bell) trigger desktop notifications on macOS via Notification Center, falling back to tmux `display-message` over SSH or when the helper isn't installed. Implementation: tmux hooks (`pane-died`, `alert-bell`) invoke `muster _pane-died` / `muster _bell` subcommands, which delegate to a `muster-notify` helper binary inside a minimal `Muster.app` bundle at `~/.config/muster/Muster.app/`. The app bundle provides the `CFBundleIdentifier` that macOS requires for persistent notification permissions. CLI: `muster setup-notifications` creates the bundle. Pane death notifications include the last few lines of terminal output in the notification body.
+**Desktop notifications** *(implemented)* — Session events (pane exits, terminal bell) trigger desktop notifications on macOS via Notification Center, falling back to tmux `display-message` over SSH or when the helper isn't installed. Implementation: tmux hooks (`pane-died`, `alert-bell`) invoke `muster _pane-died` / `muster _bell` subcommands, which delegate to a `muster-notify` helper binary inside a minimal `MusterNotify.app` bundle at `~/Library/Application Support/muster/MusterNotify.app/` (see §3.1 for why this lives outside `~/.config/muster/`). The app bundle provides the `CFBundleIdentifier` that macOS requires for persistent notification permissions. CLI: `muster notifications setup` creates the bundle, `muster notifications test` sends a probe, `muster notifications remove` uninstalls. Pane death notifications include the last few lines of terminal output in the notification body.
 
 **Death snapshots** *(implemented)* — When a pane dies, the `_pane-died` handler captures the last 50 lines of output before calling `kill-pane`. Snapshots are saved to `~/.config/muster/logs/<session_name>/<window_name>.last`. Files are overwritten on each death event per window name, keeping the directory small.
 

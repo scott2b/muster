@@ -325,11 +325,16 @@ pub(crate) fn send_notification(
         .status();
 }
 
-/// Install the MusterNotify.app notification helper bundle into ~/.config/muster/.
+/// Install the MusterNotify.app notification helper bundle.
 ///
 /// macOS requires a `CFBundleIdentifier` for persistent Notification Center access.
 /// This creates a minimal .app bundle containing the `muster-notify` binary,
 /// codesigns it, and prints instructions for first-run permission grant.
+///
+/// Path: `dirs::config_dir()/muster/MusterNotify.app/` — on macOS this resolves
+/// to `~/Library/Application Support/muster/`, the conventional location for
+/// `.app` bundles. This is deliberately separate from the cli's portable config
+/// at `~/.config/muster/` (profiles, logs); see SPECIFICATION.md §3.1.
 pub(crate) fn setup_notifications() -> crate::error::Result {
     let config_dir = dirs::config_dir()
         .ok_or("Could not determine config directory")?

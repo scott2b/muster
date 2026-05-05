@@ -17,6 +17,11 @@ mod resources;
 mod tabs;
 mod terminal;
 
+/// Portable cli config root (profiles, settings, logs). Hardcoded to
+/// `~/.config/muster/` on every platform so the tree is identical across
+/// Linux and macOS. The macOS notification bundle deliberately does *not*
+/// live here — it goes under `dirs::config_dir()` (`~/Library/Application
+/// Support/`) per macOS convention. See SPECIFICATION.md §3.1.
 fn default_config_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
